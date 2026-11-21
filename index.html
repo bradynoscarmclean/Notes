@@ -127,12 +127,20 @@
 const $ = id => document.getElementById(id);
 const editor = $('editor'), titleEl = $('title');
 
-// ---- storage ----
+// ---- storage: the Mac app provides window.nativeStore and saves to disk; browsers fall back to localStorage ----
+const nativeSave = window.webkit?.messageHandlers?.store;
 function load(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+  try {
+    const raw = window.nativeStore ? window.nativeStore[key] : localStorage.getItem(key);
+    return JSON.parse(raw) ?? fallback;
+  } catch { return fallback; }
 }
 function save(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+  const raw = JSON.stringify(val);
+  try {
+    if (nativeSave) { window.nativeStore[key] = raw; nativeSave.postMessage({ key, value: raw }); }
+    else localStorage.setItem(key, raw);
+  } catch {}
 }
 
 let notes = load('termnotes.notes', []);
