@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>termnotes</title>
+<style>
+  :root {
+    --bg: #0e0e0e;
+    --fg: #d0d0d0;
+    --dim: #6a6a6a;
+    --accent: #4ee06b;
+    --title: #ffd75f;
+    --red: #ff5f5f;
+    --sel: #1c2e21;
+    --line: #222;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.6 "SF Mono", Menlo, Monaco, Consolas, monospace;
+    display: flex;
+    flex-direction: column;
+  }
+  main { flex: 1; display: flex; min-height: 0; }
+  #sidebar {
+    width: 220px;
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+  .note-item {
+    padding: 2px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--dim);
+  }
+  .note-item:hover { color: var(--fg); }
+  .note-item.active { background: var(--sel); color: var(--accent); }
+  #editorWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #title {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--title);
+    font: inherit;
+    padding: 16px 20px 0;
+  }
+  #editor {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    color: var(--fg);
+    font: inherit;
+    padding: 8px 20px 20px;
+    caret-color: var(--accent);
+  }
+  #shorthands {
+    display: none;
+    border-top: 1px solid var(--line);
+    padding: 8px 20px;
+    max-height: 30vh;
+    overflow-y: auto;
+  }
+  #shorthands.open { display: block; }
+  #shorthands .row { display: flex; gap: 12px; }
+  #shorthands .abbr { color: var(--accent); width: 3ch; }
+  #shorthands .dim { color: var(--dim); }
+  #prompt {
+    display: none;
+    border-top: 1px solid var(--line);
+    padding: 6px 20px;
+    align-items: center;
+    gap: 8px;
+  }
+  #prompt.open { display: flex; }
+  #promptLabel { color: var(--accent); white-space: nowrap; }
+  #promptInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font: inherit;
+    caret-color: var(--accent);
+  }
+  footer {
+    padding: 4px 20px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  footer kbd { color: var(--fg); font: inherit; }
+  #status.ok { color: var(--accent); }
+  #status.err { color: var(--red); }
+  @media (max-width: 600px) {
+    #sidebar { width: 120px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav id="sidebar"><div id="noteList"></div></nav>
+  <section id="editorWrap">
+    <input id="title" placeholder="untitled" spellcheck="false">
+    <textarea id="editor" spellcheck="false" placeholder="start typing..."></textarea>
+    <div id="shorthands"></div>
+    <div id="prompt"><span id="promptLabel"></span><input id="promptInput" spellcheck="false" autocomplete="off"></div>
+  </section>
+</main>
+<footer>
+  <span><kbd>⌥S</kbd> shorthand · <kbd>⌥L</kbd> list · <kbd>⌥N</kbd> new · <kbd>⌥D</kbd> delete · <kbd>⌥P</kbd> push to GitHub · <kbd>⌥G</kbd> GitHub token · <kbd>Tab</kbd> expand</span>
+  <span id="status"></span>
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const editor = $('editor'), titleEl = $('title');
+
+// ---- storage ----
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+let notes = load('termnotes.notes', []);
+let shorthands = load('termnotes.shorthands', {});
+let github = load('termnotes.github', {});
+let currentId = load('termnotes.current', null);
+
+if (!notes.length) newNote(false);
+if (!notes.find(n => n.id === currentId)) currentId = notes[0].id;
+
+function current() { return notes.find(n => n.id === currentId); }
+function persist() { save('termnotes.notes', notes); save('termnotes.current', currentId); }
+
+// ---- notes ----
+function newNote(focus = true) {
+  const n = { id: Date.now().toString(36), title: '', body: '', updated: Date.now() };
+  notes.unshift(n);
+  currentId = n.id;
+  persist();
+  if (focus) { render(); titleEl.focus(); }
+}
+
+function deleteNote() {
+  const n = current();
+  if (!confirm(`Delete "${n.title || 'untitled'}"?`)) return;
+  notes = notes.filter(x => x.id !== n.id);
+  if (!notes.length) newNote(false);
+  currentId = notes[0].id;
+  persist();
+  render();
+  status('note deleted', 'ok');
+}
+
+function render() {
+  const n = current();
+  titleEl.value = n.title;
+  editor.value = n.body;
+  const list = $('noteList');
+  list.innerHTML = '';
+  for (const note of notes) {
+    const div = document.createElement('div');
+    div.className = 'note-item' + (note.id === currentId ? ' active' : '');
+    div.textContent = note.title || 'untitled';
+    div.onclick = () => { currentId = note.id; persist(); render(); editor.focus(); };
+    list.appendChild(div);
+  }
+  renderShorthands();
+}
+
+titleEl.addEventListener('input', () => {
+  const n = current();
+  n.title = titleEl.value; n.updated = Date.now();
+  persist();
+  render();
+});
+titleEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); editor.focus(); }
+});
+editor.addEventListener('input', () => {
+  const n = current();
+  n.body = editor.value; n.updated = Date.now();
+  persist();
+});
+
+// ---- shorthand expansion on Tab ----
+editor.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || e.altKey || e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0, pos);
+  const m = before.match(/(?:^|[^A-Za-z])([A-Za-z]{2})$/);
+  const abbr = m && m[1];
+  const full = abbr && shorthands[abbr.toLowerCase()];
+  if (full) {
+    // Keep capitalisation if the shorthand was typed with a capital first letter
+    const word = abbr[0] === abbr[0].toUpperCase() ? full[0].toUpperCase() + full.slice(1) : full;
+    editor.setRangeText(word, pos - 2, pos, 'end');
+  } else {
+    editor.setRangeText('  ', pos, editor.selectionEnd, 'end');
+  }
+  editor.dispatchEvent(new Event('input'));
+});
+
+// ---- bottom prompt: ask(label) resolves with the typed text, or null on Esc ----
+const promptEl = $('prompt'), promptInput = $('promptInput'), promptLabel = $('promptLabel');
+let promptResolve = null, returnFocus = null;
+
+function ask(label, { value = '', maxLength, secret = false } = {}) {
+  if (!promptResolve) returnFocus = document.activeElement;
+  promptLabel.textContent = label;
+  promptInput.value = value;
+  promptInput.type = secret ? 'password' : 'text';
+  if (maxLength) promptInput.maxLength = maxLength; else promptInput.removeAttribute('maxlength');
+  promptEl.classList.add('open');
+  promptInput.focus();
+  return new Promise(resolve => { promptResolve = resolve; });
+}
+function finishPrompt(result) {
+  const resolve = promptResolve;
+  promptResolve = null;
+  promptEl.classList.remove('open');
+  (returnFocus || editor).focus();
+  resolve(result);
+}
+promptInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); finishPrompt(null); status('cancelled'); }
+  else if (e.key === 'Enter') { e.preventDefault(); finishPrompt(promptInput.value.trim()); }
+});
+
+// ---- shorthand (Option+S) ----
+async function addShorthand() {
+  let abbr;
+  while (true) {
+    abbr = await ask('shorthand (2 letters)>', { maxLength: 2 });
+    if (abbr === null) return;
+    if (/^[A-Za-z]{2}$/.test(abbr)) break;
+    status('shorthand must be exactly 2 letters', 'err');
+  }
+  abbr = abbr.toLowerCase();
+  const existing = shorthands[abbr];
+  const full = await ask(`${abbr} expands to${existing ? ` [${existing}]` : ''} (blank = remove)>`);
+  if (full === null) return;
+  if (full) {
+    shorthands[abbr] = full;
+    status(`added: ${abbr} → ${full}`, 'ok');
+  } else if (existing) {
+    delete shorthands[abbr];
+    status(`removed: ${abbr}`, 'ok');
+  } else {
+    status('nothing to remove');
+  }
+  save('termnotes.shorthands', shorthands);
+  renderShorthands();
+}
+
+function renderShorthands() {
+  const box = $('shorthands');
+  const keys = Object.keys(shorthands).sort();
+  box.innerHTML = '<div class="dim">shorthands</div>';
+  if (!keys.length) box.innerHTML += '<div class="dim">(none yet: press ⌥S to add one)</div>';
+  for (const k of keys) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<span class="abbr"></span><span class="dim">→</span><span></span>`;
+    row.children[0].textContent = k;
+    row.children[2].textContent = shorthands[k];
+    box.appendChild(row);
+  }
+}
+
+// ---- GitHub push (Option+P) ----
+async function setToken() {
+  const token = await ask('GitHub token (blank = forget)>', { secret: true });
+  if (token === null) return false;
+  if (token) { github.token = token; status('token saved', 'ok'); }
+  else { delete github.token; status('token removed', 'ok'); }
+  save('termnotes.github', github);
+  return !!token;
+}
+
+function toBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+async function pushNote() {
+  const n = current();
+  if (!github.token && !(await setToken())) return;
+
+  const repo = await ask('push README.md to repo (owner/name)>', { value: n.repo || github.repo || '' });
+  if (!repo) return;
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { status('repo must look like owner/name', 'err'); return; }
+  n.repo = github.repo = repo;
+  persist();
+  save('termnotes.github', github);
+
+  const url = `https://api.github.com/repos/${repo}/contents/README.md`;
+  const headers = {
+    Authorization: `Bearer ${github.token}`,
+    Accept: 'application/vnd.github+json',
+  };
+  const content = (n.title ? `# ${n.title}\n\n` : '') + n.body + '\n';
+  status(`pushing to ${repo}...`);
+
+  try {
+    // Updating an existing README requires its current sha
+    let sha;
+    const existing = await fetch(url, { headers });
+    if (existing.ok) sha = (await existing.json()).sha;
+    else if (existing.status === 401) throw new Error('bad token (press ⌥G to set a new one)');
+
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        message: `Update README from termnotes: ${n.title || 'untitled'}`,
+        content: toBase64(content),
+        ...(sha && { sha }),
+      }),
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('bad token (press ⌥G to set a new one)');
+      if (res.status === 404) throw new Error(`repo ${repo} not found, or the token can't write to it`);
+      throw new Error((await res.json()).message || res.statusText);
+    }
+    status(`pushed to github.com/${repo}`, 'ok');
+  } catch (err) {
+    status(`push failed: ${err.message}`, 'err');
+  }
+}
+
+// ---- global shortcuts (use e.code: Option+S on a Mac types "ß") ----
+document.addEventListener('keydown', e => {
+  if (!e.altKey || e.metaKey || e.ctrlKey || promptResolve) return;
+  const actions = {
+    KeyS: addShorthand,
+    KeyL: () => $('shorthands').classList.toggle('open'),
+    KeyN: newNote,
+    KeyD: deleteNote,
+    KeyP: pushNote,
+    KeyG: setToken,
+  };
+  if (actions[e.code]) { e.preventDefault(); actions[e.code](); }
+});
+
+let statusTimer;
+function status(msg, kind = '') {
+  const s = $('status');
+  s.textContent = msg;
+  s.className = kind;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { s.textContent = ''; }, kind === 'err' ? 6000 : 3000);
+}
+
+render();
+editor.focus();
+</script>
+</body>
+</html>
