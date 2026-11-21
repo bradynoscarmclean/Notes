@@ -9,14 +9,18 @@
   try {
     if (window.nativeStore) document.documentElement.classList.add('native');
     const t = JSON.parse(window.nativeStore ? window.nativeStore['termnotes.theme'] : localStorage.getItem('termnotes.theme'));
-    if (t) document.documentElement.dataset.theme = t;
+    if (t && t !== 'system') document.documentElement.dataset.theme = t;
+    const s = JSON.parse(window.nativeStore ? window.nativeStore['termnotes.settings'] : localStorage.getItem('termnotes.settings'));
+    if (s && s.size) document.documentElement.style.setProperty('--size', s.size + 'px');
   } catch {}
 </script>
 <style>
   :root {
+    --size: 12.5px;
     --fg: #e4e7ec;
     --bold: #ffffff;
     --dim: #8a93a5;
+    --yellow: #ecc66c;
     --green: #8fd694;
     --blue: #7cc0ff;
     --red: #f28b82;
@@ -27,14 +31,14 @@
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --fg: #24292f; --bold: #000000; --dim: #6e7781; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
+      --fg: #24292f; --bold: #000000; --dim: #6e7781; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
       --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
       --tint: rgba(255, 255, 255, 0.5);
       --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
     }
   }
   :root[data-theme="light"] {
-    --fg: #24292f; --bold: #000000; --dim: #6e7781; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
+    --fg: #24292f; --bold: #000000; --dim: #6e7781; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
     --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
     --tint: rgba(255, 255, 255, 0.5);
     --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
@@ -45,7 +49,7 @@
   body {
     background: var(--fallback);
     color: var(--fg);
-    font: 13.5px/1.6 "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+    font: var(--size)/1.6 "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
     display: flex;
     flex-direction: column;
   }
@@ -74,18 +78,16 @@
   #account { color: var(--dim); padding: 10px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   #editorWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .titleRow { display: flex; color: var(--bold); }
-  .titleRow .bullet { width: 2ch; flex-shrink: 0; }
   #title {
-    flex: 1;
-    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
-    padding: 0;
-    color: var(--bold);
+    padding: 0 0 6px;
+    color: var(--yellow);
     font: inherit;
+    font-size: calc(var(--size) * 1.55);
     font-weight: 700;
+    line-height: 1.3;
   }
   #title::placeholder { color: var(--dim); font-weight: normal; }
 
@@ -96,7 +98,7 @@
     inset: 0;
     margin: 0;
     border: none;
-    padding: 0 0 24px 2ch;
+    padding: 0 0 24px;
     font: inherit;
     white-space: pre-wrap;
     overflow-wrap: break-word;
@@ -118,16 +120,29 @@
   .hl-name, .hl-date { color: var(--green); }
   .hl-term { color: var(--blue); }
 
-  #defbar { display: none; color: var(--dim); padding: 8px 0 0 2ch; }
+  #defbar { display: none; color: var(--dim); padding: 8px 0 0; }
   #defbar.open { display: block; }
   #defbar .term { color: var(--blue); }
 
-  #panel { display: none; padding: 10px 0 0 2ch; max-height: 34vh; overflow-y: auto; scrollbar-width: none; }
+  #panel { display: none; padding: 10px 0 0; max-height: 34vh; overflow-y: auto; scrollbar-width: none; }
   #panel.open { display: block; }
   #panel .heading { margin-top: 10px; }
   #panel .heading:first-child { margin-top: 0; }
   #panel .row { padding-left: 2ch; }
   #panel .term { color: var(--blue); }
+
+  /* Settings replace the editor while open */
+  #settings { display: none; outline: none; overflow-y: auto; }
+  #editorWrap.settings-open > :not(#settings):not(#prompt) { display: none; }
+  #editorWrap.settings-open #settings { display: block; }
+  #settings h2 { margin: 0 0 4px; font-size: calc(var(--size) * 1.55); line-height: 1.3; color: var(--yellow); }
+  #settings .hint { color: var(--dim); margin-bottom: 14px; }
+  .setting { cursor: pointer; padding: 1px 0; color: var(--fg); white-space: pre-wrap; }
+  .setting::before { content: "  "; }
+  .setting.sel { color: var(--bold); font-weight: 700; }
+  .setting.sel::before { content: "❯ "; }
+  .setting .val { color: var(--blue); }
+  .setting .note { color: var(--dim); font-weight: normal; }
 
   #prompt {
     display: none;
@@ -172,7 +187,8 @@
     <div id="account"></div>
   </nav>
   <section id="editorWrap">
-    <div class="titleRow"><span class="bullet">●</span><input id="title" placeholder="Untitled" spellcheck="false"></div>
+    <input id="title" placeholder="Untitled" spellcheck="false">
+    <div id="settings" tabindex="0"></div>
     <div id="editorBox">
       <div id="backdrop" aria-hidden="true"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start typing..."></textarea>
@@ -184,7 +200,7 @@
 </main>
 <footer>
   <div id="status"></div>
-  <div id="keys"><b>⌘D</b> define · <b>⌘S</b> shorthand · <b>Tab</b> expand · <b>⌘L</b> lists · <b>⌘N</b> new · <b>⌘⇧D</b> delete · <b>⌘P</b> push · <b>⌘G</b> GitHub · <b>⌘⇧L</b> light/dark</div>
+  <div id="keys"><b>⌘,</b> settings · <b>⌘D</b> define · <b>⌘S</b> shorthand · <b>⌘⇧S</b> shorthand from selection · <b>Tab</b> expand · <b>⌘L</b> lists · <b>⌘N</b> new · <b>⌘⇧D</b> delete · <b>⌘P</b> push · <b>⌘G</b> GitHub</div>
 </footer>
 
 <script>
@@ -212,6 +228,10 @@ let shorthands = load('termnotes.shorthands', {});
 let dictionary = load('termnotes.dictionary', {}); // lowercased term -> { term, def }
 let github = load('termnotes.github', {});
 let currentId = load('termnotes.current', null);
+let settings = {
+  autoExpand: false, names: true, dates: true, terms: true, size: 12.5, showKeys: true,
+  ...load('termnotes.settings', {}),
+};
 
 if (!notes.length) newNote(false);
 if (!notes.find(n => n.id === currentId)) currentId = notes[0].id;
@@ -330,9 +350,9 @@ function findRanges(text) {
       if (start < end && free(start, end)) ranges.push({ start, end, cls });
     }
   };
-  add(dictionaryRegex(), 'hl-term');
-  add(DATE_RE, 'hl-date');
-  add(NAME_RE, 'hl-name');
+  if (settings.terms) add(dictionaryRegex(), 'hl-term');
+  if (settings.dates) add(DATE_RE, 'hl-date');
+  if (settings.names) add(NAME_RE, 'hl-name');
   return ranges.sort((a, b) => a.start - b.start);
 }
 
@@ -361,22 +381,38 @@ function updateDefbar() {
   if (hit) bar.innerHTML = `⎿  <span class="term">${escapeHtml(hit.term)}</span>: ${escapeHtml(hit.def)}`;
 }
 
-// ---- shorthand expansion on Tab ----
+// ---- shorthand expansion: on Tab, or automatically after a space/punctuation if that setting is on ----
+// Replaces a two-letter shorthand ending at `end`; returns the length change, or null if there was none
+function expandAt(end) {
+  const m = editor.value.slice(0, end).match(/(?:^|[^A-Za-z])([A-Za-z]{2})$/);
+  const abbr = m && m[1];
+  const full = abbr && shorthands[abbr.toLowerCase()];
+  if (!full) return null;
+  // Keep capitalisation if the shorthand was typed with a capital first letter
+  const word = abbr[0] === abbr[0].toUpperCase() ? full[0].toUpperCase() + full.slice(1) : full;
+  editor.setRangeText(word, end - 2, end, 'preserve');
+  return word.length - 2;
+}
+
 editor.addEventListener('keydown', e => {
   if (e.key !== 'Tab' || e.altKey || e.metaKey || e.ctrlKey) return;
   e.preventDefault();
   const pos = editor.selectionStart;
-  const before = editor.value.slice(0, pos);
-  const m = before.match(/(?:^|[^A-Za-z])([A-Za-z]{2})$/);
-  const abbr = m && m[1];
-  const full = abbr && shorthands[abbr.toLowerCase()];
-  if (full) {
-    // Keep capitalisation if the shorthand was typed with a capital first letter
-    const word = abbr[0] === abbr[0].toUpperCase() ? full[0].toUpperCase() + full.slice(1) : full;
-    editor.setRangeText(word, pos - 2, pos, 'end');
-  } else {
-    editor.setRangeText('  ', pos, editor.selectionEnd, 'end');
-  }
+  const grew = expandAt(pos);
+  if (grew === null) editor.setRangeText('  ', pos, editor.selectionEnd, 'end');
+  else editor.setSelectionRange(pos + grew, pos + grew);
+  editor.dispatchEvent(new Event('input'));
+});
+
+editor.addEventListener('input', e => {
+  if (!settings.autoExpand) return;
+  const typedBreak = e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph'
+    || (e.inputType === 'insertText' && /^[^A-Za-z0-9'-]$/.test(e.data));
+  if (!typedBreak) return;
+  const pos = editor.selectionStart;
+  const grew = expandAt(pos - 1);
+  if (grew === null) return;
+  editor.setSelectionRange(pos + grew, pos + grew);
   editor.dispatchEvent(new Event('input'));
 });
 
@@ -441,16 +477,31 @@ async function defineTerm() {
   updateDefbar();
 }
 
-// ---- shorthand (Cmd+S) ----
-async function addShorthand() {
-  let abbr;
+// ---- shorthand (Cmd+S, and Cmd+Shift+S for the selected word) ----
+async function askAbbr(label) {
   while (true) {
-    abbr = await ask('Shorthand (2 letters):', { maxLength: 2 });
-    if (abbr === null) return;
-    if (/^[A-Za-z]{2}$/.test(abbr)) break;
+    const abbr = await ask(label, { maxLength: 2 });
+    if (abbr === null) return null;
+    if (/^[A-Za-z]{2}$/.test(abbr)) return abbr.toLowerCase();
     status('Shorthand must be exactly 2 letters', 'err');
   }
-  abbr = abbr.toLowerCase();
+}
+
+async function shorthandForSelection() {
+  const word = selectedTerm();
+  if (!word) { status('Select a word first', 'err'); return; }
+  const abbr = await askAbbr(`Shorthand for "${word}" (2 letters):`);
+  if (abbr === null) return;
+  const replaced = shorthands[abbr];
+  shorthands[abbr] = word;
+  save('termnotes.shorthands', shorthands);
+  renderPanel();
+  status(`Added ${abbr} → ${word}${replaced && replaced !== word ? ` (replaced ${replaced})` : ''}`, 'ok');
+}
+
+async function addShorthand() {
+  const abbr = await askAbbr('Shorthand (2 letters):');
+  if (abbr === null) return;
   const existing = shorthands[abbr];
   const full = await ask(`"${abbr}" expands to (blank = remove):`, { value: existing || '' });
   if (full === null) return;
@@ -488,16 +539,100 @@ function renderPanel() {
     'None yet. Select a word and press ⌘D.', 'term');
 }
 
-// ---- light / dark (Cmd+Shift+L) ----
+// ---- theme: 'system', 'dark' or 'light' (Cmd+Shift+L flips light/dark) ----
+function setTheme(mode) {
+  if (mode === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode;
+  save('termnotes.theme', mode);
+  window.webkit?.messageHandlers?.theme?.postMessage(mode);
+}
+
 function toggleTheme() {
   const t = document.documentElement.dataset.theme;
   const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  const next = dark ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  save('termnotes.theme', next);
-  window.webkit?.messageHandlers?.theme?.postMessage(next);
-  status(next === 'light' ? 'Light mode' : 'Dark mode', 'ok');
+  setTheme(dark ? 'light' : 'dark');
+  status(dark ? 'Light mode' : 'Dark mode', 'ok');
+  if (settingsOpen()) renderSettings();
 }
+
+// ---- settings (Cmd+,) ----
+const capitalise = s => s[0].toUpperCase() + s.slice(1);
+const SETTINGS = [
+  { key: 'autoExpand', label: 'Expand shorthands without pressing Tab', note: 'after a space, punctuation or new line' },
+  { key: 'names', label: 'Highlight names' },
+  { key: 'dates', label: 'Highlight dates and times' },
+  { key: 'terms', label: 'Highlight dictionary words' },
+  { key: 'size', label: 'Text size', options: [11, 12, 12.5, 13, 13.5, 14, 15, 16], format: v => `${v}px` },
+  { key: 'theme', label: 'Theme', options: ['system', 'dark', 'light'], format: capitalise },
+  { key: 'showKeys', label: 'Show shortcuts at the bottom' },
+];
+let settingIndex = 0;
+
+const settingsOpen = () => $('editorWrap').classList.contains('settings-open');
+const settingValue = s => s.key === 'theme' ? load('termnotes.theme', 'system') : settings[s.key];
+
+function applySettings() {
+  document.documentElement.style.setProperty('--size', settings.size + 'px');
+  $('keys').style.display = settings.showKeys ? '' : 'none';
+  renderHighlights();
+  updateDefbar();
+}
+
+function changeSetting(s, step = 1) {
+  if (s.options) {
+    const i = s.options.indexOf(settingValue(s));
+    const next = s.options[(i + step + s.options.length) % s.options.length];
+    if (s.key === 'theme') setTheme(next);
+    else settings[s.key] = next;
+  } else {
+    settings[s.key] = !settings[s.key];
+  }
+  save('termnotes.settings', settings);
+  applySettings();
+  renderSettings();
+}
+
+function renderSettings() {
+  const box = $('settings');
+  box.innerHTML = '<h2>Settings</h2><div class="hint">↑↓ to move · Space or ←→ to change · Esc to close</div>';
+  SETTINGS.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'setting' + (i === settingIndex ? ' sel' : '');
+    const value = settingValue(s);
+    const shown = s.options ? `‹ ${s.format(value)} ›` : value ? '[x]' : '[ ]';
+    row.innerHTML = s.options
+      ? `${escapeHtml(s.label)}  <span class="val">${escapeHtml(shown)}</span>`
+      : `<span class="val">${shown}</span> ${escapeHtml(s.label)}${s.note ? `  <span class="note">${escapeHtml(s.note)}</span>` : ''}`;
+    row.onclick = () => { settingIndex = i; changeSetting(s); };
+    box.appendChild(row);
+  });
+}
+
+function openSettings() {
+  if (promptResolve) return;
+  $('editorWrap').classList.add('settings-open');
+  renderSettings();
+  $('settings').focus();
+}
+function closeSettings() {
+  $('editorWrap').classList.remove('settings-open');
+  editor.focus();
+}
+window.openSettings = openSettings;
+
+$('settings').addEventListener('keydown', e => {
+  const s = SETTINGS[settingIndex];
+  const keys = {
+    ArrowUp: () => { settingIndex = (settingIndex + SETTINGS.length - 1) % SETTINGS.length; renderSettings(); },
+    ArrowDown: () => { settingIndex = (settingIndex + 1) % SETTINGS.length; renderSettings(); },
+    ArrowLeft: () => changeSetting(s, -1),
+    ArrowRight: () => changeSetting(s, 1),
+    ' ': () => changeSetting(s, 1),
+    Enter: () => changeSetting(s, 1),
+    Escape: closeSettings,
+  };
+  if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
+});
 
 // ---- GitHub account (Cmd+G) ----
 const nativeGithub = window.webkit?.messageHandlers?.github;
@@ -616,7 +751,13 @@ async function pushNote() {
 // ---- global shortcuts ----
 document.addEventListener('keydown', e => {
   if (promptResolve || !e.metaKey || e.ctrlKey || e.altKey) return;
-  const actions = e.shiftKey ? { KeyD: deleteNote, KeyL: toggleTheme } : {
+  if (e.code === 'Comma') {
+    e.preventDefault();
+    settingsOpen() ? closeSettings() : openSettings();
+    return;
+  }
+  if (settingsOpen()) return;
+  const actions = e.shiftKey ? { KeyD: deleteNote, KeyL: toggleTheme, KeyS: shorthandForSelection } : {
     KeyD: defineTerm,
     KeyS: addShorthand,
     KeyL: () => $('panel').classList.toggle('open'),
@@ -639,6 +780,7 @@ function status(msg, kind = '', ms = kind === 'err' ? 6000 : 3000) {
 
 render();
 renderAccount();
+applySettings();
 status('Ready', '', 0);
 // Older versions saved a pasted token without the username
 if (github.token && !github.login) finishConnect(github.token);

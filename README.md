@@ -14,6 +14,7 @@ The first time you open it, macOS will block it because it isn't from the App St
 | --- | --- |
 | ⌘D | Define the selected word (shows in blue; put the cursor on it to see the definition) |
 | ⌘S | Add a shorthand (2 letters → full word) |
+| ⌘⇧S | Make a shorthand for the selected word |
 | Tab | Expand the shorthand before the cursor |
 | ⌘L | Show/hide your shorthands and dictionary |
 | ⌘N | New note |
@@ -21,6 +22,7 @@ The first time you open it, macOS will block it because it isn't from the App St
 | ⌘P | Push the current note to a GitHub repo as README.md |
 | ⌘G | Connect or disconnect your GitHub account |
 | ⌘⇧L | Switch between light and dark mode |
+| ⌘, | Settings (auto-expand shorthands, highlighting, text size, theme) |
 
 Notes are saved in `~/Library/Application Support/Termnotes/store.json`.
 

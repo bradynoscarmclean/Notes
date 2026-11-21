@@ -197,12 +197,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         completionHandler()
     }
 
+    @objc func openSettings() {
+        webView.evaluateJavaScript("openSettings()")
+    }
+
     // Without an Edit menu, ⌘C / ⌘V / ⌘Z don't reach the web view
     func buildMenu() {
         let main = NSMenu()
 
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Termnotes", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Termnotes", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
