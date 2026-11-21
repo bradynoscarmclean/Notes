@@ -1,6 +1,6 @@
 # Termnotes
 
-A simple Mac notes app with a monospace, terminal-style feel and two-letter shorthands.
+A simple Mac notes app with a clean dark editor, two-letter shorthands, and your own dictionary. Names and dates are highlighted yellow, dictionary words blue.
 
 ## Download
 
@@ -12,9 +12,10 @@ The first time you open it, macOS will block it because it isn't from the App St
 
 | Keys | Action |
 | --- | --- |
+| ⌘D | Define the selected word (shows in blue; put the cursor on it to see the definition) |
 | ⌥S | Add a shorthand (2 letters → full word) |
 | Tab | Expand the shorthand before the cursor |
-| ⌥L | Show/hide your shorthands |
+| ⌥L | Show/hide your shorthands and dictionary |
 | ⌥N | New note |
 | ⌥D | Delete note |
 | ⌥P | Push the current note to a GitHub repo as README.md |

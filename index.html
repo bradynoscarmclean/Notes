@@ -3,84 +3,123 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>termnotes</title>
+<title>Termnotes</title>
 <style>
   :root {
-    --bg: #0e0e0e;
-    --fg: #d0d0d0;
-    --dim: #6a6a6a;
-    --accent: #4ee06b;
-    --title: #ffd75f;
-    --red: #ff5f5f;
-    --sel: #1c2e21;
-    --line: #222;
+    --bg: #1e1f22;
+    --sidebar: #191a1c;
+    --fg: #e4e4e4;
+    --dim: #7d8088;
+    --line: #2d2f33;
+    --hover: #26282c;
+    --active: #2f3238;
+    --yellow: #e5c07b;
+    --blue: #61afef;
+    --red: #e06c75;
+    --selection: rgba(120, 150, 200, 0.28);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg);
     color: var(--fg);
-    font: 14px/1.6 "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font: 14px/1.65 "SF Mono", Menlo, Monaco, Consolas, monospace;
     display: flex;
     flex-direction: column;
   }
   main { flex: 1; display: flex; min-height: 0; }
   #sidebar {
     width: 220px;
+    background: var(--sidebar);
     border-right: 1px solid var(--line);
     overflow-y: auto;
-    padding: 12px 0;
+    padding: 10px 0;
   }
   .note-item {
-    padding: 2px 16px;
+    padding: 3px 16px;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--dim);
   }
-  .note-item:hover { color: var(--fg); }
-  .note-item.active { background: var(--sel); color: var(--accent); }
+  .note-item:hover { background: var(--hover); color: var(--fg); }
+  .note-item.active { background: var(--active); color: var(--fg); }
   #editorWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   #title {
     background: transparent;
     border: none;
     outline: none;
-    color: var(--title);
-    font: inherit;
-    padding: 16px 20px 0;
-  }
-  #editor {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    resize: none;
     color: var(--fg);
     font: inherit;
+    font-weight: 600;
+    padding: 16px 20px 0;
+  }
+  #title::placeholder { color: var(--dim); font-weight: normal; }
+
+  /* The textarea sits on top with invisible text; the backdrop underneath draws the coloured text */
+  #editorBox { position: relative; flex: 1; min-height: 0; }
+  #backdrop, #editor {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    border: none;
     padding: 8px 20px 20px;
-    caret-color: var(--accent);
-  }
-  #shorthands {
-    display: none;
-    border-top: 1px solid var(--line);
-    padding: 8px 20px;
-    max-height: 30vh;
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
     overflow-y: auto;
+    scrollbar-width: none;
   }
-  #shorthands.open { display: block; }
-  #shorthands .row { display: flex; gap: 12px; }
-  #shorthands .abbr { color: var(--accent); width: 3ch; }
-  #shorthands .dim { color: var(--dim); }
-  #prompt {
+  #backdrop::-webkit-scrollbar, #editor::-webkit-scrollbar { display: none; }
+  #backdrop { color: var(--fg); pointer-events: none; overflow: hidden; }
+  #editor {
+    background: transparent;
+    color: transparent;
+    caret-color: var(--fg);
+    outline: none;
+    resize: none;
+  }
+  #editor::selection { background: var(--selection); }
+  #editor::placeholder { color: var(--dim); }
+  .hl-name, .hl-date { color: var(--yellow); }
+  .hl-term { color: var(--blue); text-decoration: underline dotted rgba(97, 175, 239, 0.6); text-underline-offset: 3px; }
+
+  #defbar {
     display: none;
     border-top: 1px solid var(--line);
     padding: 6px 20px;
+  }
+  #defbar.open { display: block; }
+  #defbar .term { color: var(--blue); }
+  #defbar .dim { color: var(--dim); }
+
+  #panel {
+    display: none;
+    border-top: 1px solid var(--line);
+    padding: 8px 20px;
+    max-height: 32vh;
+    overflow-y: auto;
+  }
+  #panel.open { display: block; }
+  #panel .heading { color: var(--dim); margin-top: 6px; }
+  #panel .heading:first-child { margin-top: 0; }
+  #panel .row { display: flex; gap: 12px; }
+  #panel .abbr { color: var(--yellow); min-width: 3ch; }
+  #panel .term { color: var(--blue); }
+  #panel .dim { color: var(--dim); }
+
+  #prompt {
+    display: none;
+    border-top: 1px solid var(--line);
+    background: var(--sidebar);
+    padding: 7px 20px;
     align-items: center;
     gap: 8px;
   }
   #prompt.open { display: flex; }
-  #promptLabel { color: var(--accent); white-space: nowrap; }
+  #promptLabel { color: var(--dim); white-space: nowrap; }
   #promptInput {
     flex: 1;
     background: transparent;
@@ -88,12 +127,14 @@
     outline: none;
     color: var(--fg);
     font: inherit;
-    caret-color: var(--accent);
+    caret-color: var(--fg);
   }
   footer {
     padding: 4px 20px;
+    background: var(--sidebar);
     border-top: 1px solid var(--line);
     color: var(--dim);
+    font-size: 12px;
     display: flex;
     justify-content: space-between;
     gap: 16px;
@@ -101,7 +142,7 @@
     overflow: hidden;
   }
   footer kbd { color: var(--fg); font: inherit; }
-  #status.ok { color: var(--accent); }
+  #status.ok { color: var(--fg); }
   #status.err { color: var(--red); }
   @media (max-width: 600px) {
     #sidebar { width: 120px; }
@@ -112,20 +153,24 @@
 <main>
   <nav id="sidebar"><div id="noteList"></div></nav>
   <section id="editorWrap">
-    <input id="title" placeholder="untitled" spellcheck="false">
-    <textarea id="editor" spellcheck="false" placeholder="start typing..."></textarea>
-    <div id="shorthands"></div>
+    <input id="title" placeholder="Untitled" spellcheck="false">
+    <div id="editorBox">
+      <div id="backdrop" aria-hidden="true"></div>
+      <textarea id="editor" spellcheck="false" placeholder="Start typing..."></textarea>
+    </div>
+    <div id="defbar"></div>
+    <div id="panel"></div>
     <div id="prompt"><span id="promptLabel"></span><input id="promptInput" spellcheck="false" autocomplete="off"></div>
   </section>
 </main>
 <footer>
-  <span><kbd>⌥S</kbd> shorthand · <kbd>⌥L</kbd> list · <kbd>⌥N</kbd> new · <kbd>⌥D</kbd> delete · <kbd>⌥P</kbd> push to GitHub · <kbd>⌥G</kbd> GitHub token · <kbd>Tab</kbd> expand</span>
+  <span><kbd>⌘D</kbd> define · <kbd>⌥S</kbd> shorthand · <kbd>Tab</kbd> expand · <kbd>⌥L</kbd> lists · <kbd>⌥N</kbd> new · <kbd>⌥D</kbd> delete · <kbd>⌥P</kbd> push to GitHub · <kbd>⌥G</kbd> token</span>
   <span id="status"></span>
 </footer>
 
 <script>
 const $ = id => document.getElementById(id);
-const editor = $('editor'), titleEl = $('title');
+const editor = $('editor'), titleEl = $('title'), backdrop = $('backdrop');
 
 // ---- storage: the Mac app provides window.nativeStore and saves to disk; browsers fall back to localStorage ----
 const nativeSave = window.webkit?.messageHandlers?.store;
@@ -145,6 +190,7 @@ function save(key, val) {
 
 let notes = load('termnotes.notes', []);
 let shorthands = load('termnotes.shorthands', {});
+let dictionary = load('termnotes.dictionary', {}); // lowercased term -> { term, def }
 let github = load('termnotes.github', {});
 let currentId = load('termnotes.current', null);
 
@@ -165,13 +211,13 @@ function newNote(focus = true) {
 
 function deleteNote() {
   const n = current();
-  if (!confirm(`Delete "${n.title || 'untitled'}"?`)) return;
+  if (!confirm(`Delete "${n.title || 'Untitled'}"?`)) return;
   notes = notes.filter(x => x.id !== n.id);
   if (!notes.length) newNote(false);
   currentId = notes[0].id;
   persist();
   render();
-  status('note deleted', 'ok');
+  status('Note deleted', 'ok');
 }
 
 function render() {
@@ -183,11 +229,13 @@ function render() {
   for (const note of notes) {
     const div = document.createElement('div');
     div.className = 'note-item' + (note.id === currentId ? ' active' : '');
-    div.textContent = note.title || 'untitled';
+    div.textContent = note.title || 'Untitled';
     div.onclick = () => { currentId = note.id; persist(); render(); editor.focus(); };
     list.appendChild(div);
   }
-  renderShorthands();
+  renderPanel();
+  renderHighlights();
+  updateDefbar();
 }
 
 titleEl.addEventListener('input', () => {
@@ -203,7 +251,84 @@ editor.addEventListener('input', () => {
   const n = current();
   n.body = editor.value; n.updated = Date.now();
   persist();
+  renderHighlights();
+  updateDefbar();
 });
+editor.addEventListener('scroll', () => { backdrop.scrollTop = editor.scrollTop; });
+document.addEventListener('selectionchange', () => { if (document.activeElement === editor) updateDefbar(); });
+
+// ---- highlighting: dictionary terms blue, dates and names yellow ----
+const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+const DAY = '\\d{1,2}(?:st|nd|rd|th)?';
+const DATE_RE = new RegExp([
+  '\\d{4}-\\d{1,2}-\\d{1,2}',
+  '\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?',
+  `${MONTH}\\.?\\s+${DAY}(?:,?\\s+\\d{4})?`,
+  `${DAY}\\s+(?:of\\s+)?${MONTH}(?:,?\\s+\\d{4})?`,
+  `${MONTH}\\s+\\d{4}`,
+  '(?:January|February|March|April|June|July|August|September|October|November|December)',
+  '(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day',
+  '(?:[Tt]oday|[Tt]omorrow|[Yy]esterday)',
+].map(p => `\\b${p}\\b`).join('|'), 'g');
+const NAME_RE = /\b[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*\b/g;
+
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function dictionaryRegex() {
+  const terms = Object.values(dictionary).map(d => d.term).sort((a, b) => b.length - a.length);
+  if (!terms.length) return null;
+  const parts = terms.map(t => (/^\w/.test(t) ? '\\b' : '') + escapeRegex(t) + (/\w$/.test(t) ? '\\b' : ''));
+  return new RegExp(parts.join('|'), 'gi');
+}
+
+function findRanges(text) {
+  const ranges = [];
+  const free = (s, e) => !ranges.some(r => s < r.end && e > r.start);
+  const add = (re, cls) => {
+    if (!re) return;
+    for (const m of text.matchAll(re)) {
+      let start = m.index;
+      const end = start + m[0].length;
+      if (cls === 'hl-name' && /(^|[.!?]\s*|\n\s*)$/.test(text.slice(0, start))) {
+        // The first word of a sentence is capitalised anyway, so it isn't treated as a name
+        const gap = m[0].search(/\s/);
+        if (gap < 0) continue;
+        start += m[0].slice(gap).search(/\S/) + gap;
+      }
+      if (start < end && free(start, end)) ranges.push({ start, end, cls });
+    }
+  };
+  add(dictionaryRegex(), 'hl-term');
+  add(DATE_RE, 'hl-date');
+  add(NAME_RE, 'hl-name');
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function renderHighlights() {
+  const text = editor.value;
+  let html = '', pos = 0;
+  for (const r of findRanges(text)) {
+    html += escapeHtml(text.slice(pos, r.start)) + `<span class="${r.cls}">${escapeHtml(text.slice(r.start, r.end))}</span>`;
+    pos = r.end;
+  }
+  // Trailing newline + space keeps the backdrop's height matching the textarea's
+  backdrop.innerHTML = html + escapeHtml(text.slice(pos)) + '\n ';
+  backdrop.scrollTop = editor.scrollTop;
+}
+
+// Shows the definition when the cursor is on a dictionary word
+function updateDefbar() {
+  const bar = $('defbar');
+  const re = dictionaryRegex();
+  const pos = editor.selectionStart;
+  let hit = null;
+  if (re) for (const m of editor.value.matchAll(re)) {
+    if (pos >= m.index && pos <= m.index + m[0].length) { hit = dictionary[m[0].toLowerCase()]; break; }
+  }
+  bar.classList.toggle('open', !!hit);
+  if (hit) bar.innerHTML = `<span class="term">${escapeHtml(hit.term)}</span> <span class="dim">·</span> ${escapeHtml(hit.def)}`;
+}
 
 // ---- shorthand expansion on Tab ----
 editor.addEventListener('keydown', e => {
@@ -236,6 +361,7 @@ function ask(label, { value = '', maxLength, secret = false } = {}) {
   if (maxLength) promptInput.maxLength = maxLength; else promptInput.removeAttribute('maxlength');
   promptEl.classList.add('open');
   promptInput.focus();
+  promptInput.select();
   return new Promise(resolve => { promptResolve = resolve; });
 }
 function finishPrompt(result) {
@@ -246,57 +372,97 @@ function finishPrompt(result) {
   resolve(result);
 }
 promptInput.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { e.preventDefault(); finishPrompt(null); status('cancelled'); }
+  if (e.key === 'Escape') { e.preventDefault(); finishPrompt(null); status('Cancelled'); }
   else if (e.key === 'Enter') { e.preventDefault(); finishPrompt(promptInput.value.trim()); }
 });
+
+// ---- dictionary (Cmd+D) ----
+function selectedTerm() {
+  let { selectionStart: s, selectionEnd: e, value } = editor;
+  if (s === e) {
+    // Nothing selected: use the word the cursor is in
+    while (s > 0 && /[\w'-]/.test(value[s - 1])) s--;
+    while (e < value.length && /[\w'-]/.test(value[e])) e++;
+  }
+  return value.slice(s, e).trim().replace(/\s+/g, ' ');
+}
+
+async function defineTerm() {
+  const term = selectedTerm();
+  if (!term) { status('Select a word first', 'err'); return; }
+  if (term.length > 60) { status('Selection is too long to define', 'err'); return; }
+  const key = term.toLowerCase();
+  const existing = dictionary[key];
+  const def = await ask(`Define "${term}" (blank = remove):`, { value: existing ? existing.def : '' });
+  if (def === null) return;
+  if (def) {
+    dictionary[key] = { term: existing ? existing.term : term, def };
+    status(`Defined "${term}"`, 'ok');
+  } else if (existing) {
+    delete dictionary[key];
+    status(`Removed "${term}"`, 'ok');
+  } else {
+    return;
+  }
+  save('termnotes.dictionary', dictionary);
+  renderPanel();
+  renderHighlights();
+  updateDefbar();
+}
 
 // ---- shorthand (Option+S) ----
 async function addShorthand() {
   let abbr;
   while (true) {
-    abbr = await ask('shorthand (2 letters)>', { maxLength: 2 });
+    abbr = await ask('Shorthand (2 letters):', { maxLength: 2 });
     if (abbr === null) return;
     if (/^[A-Za-z]{2}$/.test(abbr)) break;
-    status('shorthand must be exactly 2 letters', 'err');
+    status('Shorthand must be exactly 2 letters', 'err');
   }
   abbr = abbr.toLowerCase();
   const existing = shorthands[abbr];
-  const full = await ask(`${abbr} expands to${existing ? ` [${existing}]` : ''} (blank = remove)>`);
+  const full = await ask(`"${abbr}" expands to (blank = remove):`, { value: existing || '' });
   if (full === null) return;
   if (full) {
     shorthands[abbr] = full;
-    status(`added: ${abbr} → ${full}`, 'ok');
+    status(`Added ${abbr} → ${full}`, 'ok');
   } else if (existing) {
     delete shorthands[abbr];
-    status(`removed: ${abbr}`, 'ok');
+    status(`Removed ${abbr}`, 'ok');
   } else {
-    status('nothing to remove');
+    status('Nothing to remove');
   }
   save('termnotes.shorthands', shorthands);
-  renderShorthands();
+  renderPanel();
 }
 
-function renderShorthands() {
-  const box = $('shorthands');
-  const keys = Object.keys(shorthands).sort();
-  box.innerHTML = '<div class="dim">shorthands</div>';
-  if (!keys.length) box.innerHTML += '<div class="dim">(none yet: press ⌥S to add one)</div>';
-  for (const k of keys) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span class="abbr"></span><span class="dim">→</span><span></span>`;
-    row.children[0].textContent = k;
-    row.children[2].textContent = shorthands[k];
-    box.appendChild(row);
-  }
+function renderPanel() {
+  const box = $('panel');
+  box.innerHTML = '';
+  const section = (title, entries, emptyMsg, keyClass) => {
+    box.insertAdjacentHTML('beforeend', `<div class="heading">${title}</div>`);
+    if (!entries.length) box.insertAdjacentHTML('beforeend', `<div class="dim">${emptyMsg}</div>`);
+    for (const [k, v] of entries) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="${keyClass}"></span><span class="dim">→</span><span></span>`;
+      row.children[0].textContent = k;
+      row.children[2].textContent = v;
+      box.appendChild(row);
+    }
+  };
+  section('Shorthands', Object.keys(shorthands).sort().map(k => [k, shorthands[k]]),
+    'None yet. Press ⌥S to add one.', 'abbr');
+  section('Dictionary', Object.values(dictionary).sort((a, b) => a.term.localeCompare(b.term)).map(d => [d.term, d.def]),
+    'None yet. Select a word and press ⌘D.', 'term');
 }
 
 // ---- GitHub push (Option+P) ----
 async function setToken() {
-  const token = await ask('GitHub token (blank = forget)>', { secret: true });
+  const token = await ask('GitHub token (blank = forget):', { secret: true });
   if (token === null) return false;
-  if (token) { github.token = token; status('token saved', 'ok'); }
-  else { delete github.token; status('token removed', 'ok'); }
+  if (token) { github.token = token; status('Token saved', 'ok'); }
+  else { delete github.token; status('Token removed', 'ok'); }
   save('termnotes.github', github);
   return !!token;
 }
@@ -312,9 +478,9 @@ async function pushNote() {
   const n = current();
   if (!github.token && !(await setToken())) return;
 
-  const repo = await ask('push README.md to repo (owner/name)>', { value: n.repo || github.repo || '' });
+  const repo = await ask('Push README.md to repo (owner/name):', { value: n.repo || github.repo || '' });
   if (!repo) return;
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { status('repo must look like owner/name', 'err'); return; }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { status('Repo must look like owner/name', 'err'); return; }
   n.repo = github.repo = repo;
   persist();
   save('termnotes.github', github);
@@ -325,7 +491,7 @@ async function pushNote() {
     Accept: 'application/vnd.github+json',
   };
   const content = (n.title ? `# ${n.title}\n\n` : '') + n.body + '\n';
-  status(`pushing to ${repo}...`);
+  status(`Pushing to ${repo}...`);
 
   try {
     // Updating an existing README requires its current sha
@@ -338,7 +504,7 @@ async function pushNote() {
       method: 'PUT',
       headers,
       body: JSON.stringify({
-        message: `Update README from termnotes: ${n.title || 'untitled'}`,
+        message: `Update README from Termnotes: ${n.title || 'Untitled'}`,
         content: toBase64(content),
         ...(sha && { sha }),
       }),
@@ -348,18 +514,24 @@ async function pushNote() {
       if (res.status === 404) throw new Error(`repo ${repo} not found, or the token can't write to it`);
       throw new Error((await res.json()).message || res.statusText);
     }
-    status(`pushed to github.com/${repo}`, 'ok');
+    status(`Pushed to github.com/${repo}`, 'ok');
   } catch (err) {
-    status(`push failed: ${err.message}`, 'err');
+    status(`Push failed: ${err.message}`, 'err');
   }
 }
 
 // ---- global shortcuts (use e.code: Option+S on a Mac types "ß") ----
 document.addEventListener('keydown', e => {
-  if (!e.altKey || e.metaKey || e.ctrlKey || promptResolve) return;
+  if (promptResolve || e.ctrlKey) return;
+  if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyD') {
+    e.preventDefault();
+    defineTerm();
+    return;
+  }
+  if (!e.altKey || e.metaKey) return;
   const actions = {
     KeyS: addShorthand,
-    KeyL: () => $('shorthands').classList.toggle('open'),
+    KeyL: () => $('panel').classList.toggle('open'),
     KeyN: newNote,
     KeyD: deleteNote,
     KeyP: pushNote,

@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "Termnotes"
-        window.backgroundColor = NSColor(red: 0.055, green: 0.055, blue: 0.055, alpha: 1)
+        window.backgroundColor = NSColor(red: 0.118, green: 0.122, blue: 0.133, alpha: 1)
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = webView
         window.center()
