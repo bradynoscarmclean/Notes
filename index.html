@@ -5,15 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Termnotes</title>
 <script>
-  // Set the theme before first paint so there's no flash
+  // Set the theme and text size before first paint so there's no flash
   try {
+    const read = k => JSON.parse(window.nativeStore ? window.nativeStore[k] : localStorage.getItem(k));
     if (window.nativeStore) document.documentElement.classList.add('native');
-    const t = JSON.parse(window.nativeStore ? window.nativeStore['termnotes.theme'] : localStorage.getItem('termnotes.theme'));
+    const t = read('termnotes.theme');
     if (t && t !== 'system') document.documentElement.dataset.theme = t;
-    const s = JSON.parse(window.nativeStore ? window.nativeStore['termnotes.settings'] : localStorage.getItem('termnotes.settings'));
+    const s = read('termnotes.settings');
     if (s && s.size) document.documentElement.style.setProperty('--size', s.size + 'px');
   } catch {}
 </script>
+<script src="vendor/marked.min.js"></script>
 <style>
   :root {
     --size: 12.5px;
@@ -23,24 +25,34 @@
     --yellow: #ecc66c;
     --green: #8fd694;
     --blue: #7cc0ff;
+    --link: #4493f8;
     --red: #f28b82;
+    --accent: #f78166;
     --rule: rgba(255, 255, 255, 0.13);
+    --border: rgba(240, 246, 252, 0.15);
+    --subtle: rgba(255, 255, 255, 0.035);
+    --card: rgba(13, 17, 23, 0.5);
+    --codebg: rgba(110, 118, 129, 0.2);
     --selection: rgba(124, 192, 255, 0.28);
     --tint: rgba(17, 23, 37, 0.55);
     --fallback: linear-gradient(105deg, #191d29 0%, #1e2536 55%, #2a3652 100%);
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --fg: #24292f; --bold: #000000; --dim: #6e7781; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
-      --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
-      --tint: rgba(255, 255, 255, 0.5);
+      --fg: #1f2328; --bold: #000000; --dim: #59636e; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da;
+      --link: #0969da; --red: #cf222e; --accent: #fd8c73;
+      --rule: rgba(0, 0, 0, 0.12); --border: #d1d9e0; --subtle: rgba(246, 248, 250, 0.9);
+      --card: rgba(255, 255, 255, 0.82); --codebg: rgba(129, 139, 152, 0.12);
+      --selection: rgba(9, 105, 218, 0.18); --tint: rgba(255, 255, 255, 0.5);
       --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
     }
   }
   :root[data-theme="light"] {
-    --fg: #24292f; --bold: #000000; --dim: #6e7781; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
-    --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
-    --tint: rgba(255, 255, 255, 0.5);
+    --fg: #1f2328; --bold: #000000; --dim: #59636e; --yellow: #9a6700; --green: #1a7f37; --blue: #0969da;
+    --link: #0969da; --red: #cf222e; --accent: #fd8c73;
+    --rule: rgba(0, 0, 0, 0.12); --border: #d1d9e0; --subtle: rgba(246, 248, 250, 0.9);
+    --card: rgba(255, 255, 255, 0.82); --codebg: rgba(129, 139, 152, 0.12);
+    --selection: rgba(9, 105, 218, 0.18); --tint: rgba(255, 255, 255, 0.5);
     --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
   }
 
@@ -57,20 +69,15 @@
   html.native body { background: var(--tint); padding-top: 28px; }
   b, strong { color: var(--bold); font-weight: 700; }
   .dim { color: var(--dim); }
+  button { font: inherit; }
 
-  main { flex: 1; display: flex; gap: 36px; min-height: 0; padding: 14px 24px 0; }
+  main { flex: 1; display: flex; gap: 32px; min-height: 0; padding: 12px 24px 0; }
 
   #sidebar { width: 190px; flex-shrink: 0; display: flex; flex-direction: column; }
   #notesHeader { color: var(--dim); margin-bottom: 8px; }
   #noteList { flex: 1; overflow-y: auto; scrollbar-width: none; }
   #noteList::-webkit-scrollbar { display: none; }
-  .note-item {
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--dim);
-  }
+  .note-item { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
   .note-item::before { content: "  "; white-space: pre; }
   .note-item:hover { color: var(--fg); }
   .note-item.active { color: var(--bold); font-weight: 700; }
@@ -82,7 +89,7 @@
     background: transparent;
     border: none;
     outline: none;
-    padding: 0 0 6px;
+    padding: 0 0 10px;
     color: var(--yellow);
     font: inherit;
     font-size: calc(var(--size) * 1.55);
@@ -91,14 +98,46 @@
   }
   #title::placeholder { color: var(--dim); font-weight: normal; }
 
+  /* README-style card with Write / Preview tabs */
+  #card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--subtle);
+  }
+  .tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 10px 6px;
+    color: var(--dim);
+    cursor: pointer;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.active { color: var(--bold); font-weight: 700; border-bottom-color: var(--accent); }
+  .card-head .spacer { flex: 1; }
+  #wordCount { align-self: center; color: var(--dim); }
+
   /* The textarea sits on top with invisible text; the backdrop underneath draws the coloured text */
-  #editorBox { position: relative; flex: 1; min-height: 0; margin-top: 2px; }
+  #editorBox { position: relative; flex: 1; min-height: 0; }
   #backdrop, #editor {
     position: absolute;
     inset: 0;
     margin: 0;
     border: none;
-    padding: 0 0 24px;
+    padding: 16px 20px 24px;
     font: inherit;
     white-space: pre-wrap;
     overflow-wrap: break-word;
@@ -108,17 +147,65 @@
   }
   #backdrop::-webkit-scrollbar, #editor::-webkit-scrollbar { display: none; }
   #backdrop { color: var(--fg); pointer-events: none; overflow: hidden; }
-  #editor {
-    background: transparent;
-    color: transparent;
-    caret-color: var(--bold);
-    outline: none;
-    resize: none;
-  }
+  #editor { background: transparent; color: transparent; caret-color: var(--bold); outline: none; resize: none; }
   #editor::selection { background: var(--selection); }
   #editor::placeholder { color: var(--dim); }
   .hl-name, .hl-date { color: var(--green); }
   .hl-term { color: var(--blue); }
+  .hl-md { color: var(--bold); }
+  .hl-mark { color: var(--dim); }
+
+  #preview { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 20px 32px 32px; }
+  #card.preview #editorBox { display: none; }
+  #card.preview #preview { display: block; }
+
+  /* GitHub README styling */
+  .markdown-body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    font-size: calc(var(--size) * 1.2);
+    line-height: 1.5;
+    color: var(--fg);
+    word-wrap: break-word;
+  }
+  .markdown-body > :first-child { margin-top: 0 !important; }
+  .markdown-body h1, .markdown-body h2, .markdown-body h3,
+  .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+    margin: 24px 0 16px; font-weight: 600; line-height: 1.25; color: var(--bold);
+  }
+  .markdown-body h1 { font-size: 2em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+  .markdown-body h2 { font-size: 1.5em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+  .markdown-body h3 { font-size: 1.25em; }
+  .markdown-body h4 { font-size: 1em; }
+  .markdown-body h5 { font-size: .875em; }
+  .markdown-body h6 { font-size: .85em; color: var(--dim); }
+  .markdown-body p, .markdown-body blockquote, .markdown-body ul, .markdown-body ol,
+  .markdown-body table, .markdown-body pre, .markdown-body .chart { margin: 0 0 16px; }
+  .markdown-body a { color: var(--link); text-decoration: none; }
+  .markdown-body a:hover { text-decoration: underline; }
+  .markdown-body ul, .markdown-body ol { padding-left: 2em; }
+  .markdown-body li + li { margin-top: .25em; }
+  .markdown-body li:has(> input[type="checkbox"]) { list-style: none; }
+  .markdown-body li > input[type="checkbox"] { margin: 0 .3em .2em -1.4em; vertical-align: middle; }
+  .markdown-body blockquote { margin-left: 0; padding: 0 1em; color: var(--dim); border-left: .25em solid var(--border); }
+  .markdown-body code {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 85%;
+    padding: .2em .4em;
+    background: var(--codebg);
+    border-radius: 6px;
+  }
+  .markdown-body pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; background: var(--codebg); border-radius: 6px; }
+  .markdown-body pre code { padding: 0; background: transparent; font-size: 100%; }
+  .markdown-body table { border-collapse: collapse; display: block; width: max-content; max-width: 100%; overflow: auto; }
+  .markdown-body th, .markdown-body td { padding: 6px 13px; border: 1px solid var(--border); }
+  .markdown-body th { font-weight: 600; color: var(--bold); }
+  .markdown-body tr:nth-child(2n) { background: var(--subtle); }
+  .markdown-body img { max-width: 100%; }
+  .markdown-body hr { height: .25em; padding: 0; margin: 24px 0; background: var(--border); border: 0; }
+  .markdown-body .chart { text-align: center; max-width: 640px; }
+  .markdown-body .chart svg { max-width: 100%; height: auto; }
+  .markdown-body .hl-term { border-bottom: 1px dotted var(--blue); cursor: help; }
+  .markdown-body .empty { color: var(--dim); }
 
   #defbar { display: none; color: var(--dim); padding: 8px 0 0; }
   #defbar.open { display: block; }
@@ -131,18 +218,21 @@
   #panel .row { padding-left: 2ch; }
   #panel .term { color: var(--blue); }
 
-  /* Settings replace the editor while open */
-  #settings { display: none; outline: none; overflow-y: auto; }
-  #editorWrap.settings-open > :not(#settings):not(#prompt) { display: none; }
-  #editorWrap.settings-open #settings { display: block; }
-  #settings h2 { margin: 0 0 4px; font-size: calc(var(--size) * 1.55); line-height: 1.3; color: var(--yellow); }
-  #settings .hint { color: var(--dim); margin-bottom: 14px; }
+  /* Full-page screens (settings, shortcuts) replace the editor while open */
+  .screen { display: none; outline: none; overflow-y: auto; }
+  #editorWrap.screen-open > :not(.screen.active):not(#prompt) { display: none; }
+  .screen.active { display: block; }
+  .screen h2 { margin: 0 0 4px; font-size: calc(var(--size) * 1.55); line-height: 1.3; color: var(--yellow); }
+  .screen .hint { color: var(--dim); margin-bottom: 14px; }
   .setting { cursor: pointer; padding: 1px 0; color: var(--fg); white-space: pre-wrap; }
   .setting::before { content: "  "; }
   .setting.sel { color: var(--bold); font-weight: 700; }
   .setting.sel::before { content: "❯ "; }
   .setting .val { color: var(--blue); }
   .setting .note { color: var(--dim); font-weight: normal; }
+  .keyrow { display: flex; gap: 16px; }
+  .keyrow b { min-width: 6ch; }
+  .screen h3 { margin: 18px 0 6px; font-size: 1em; color: var(--bold); }
 
   #prompt {
     display: none;
@@ -165,17 +255,17 @@
     caret-color: var(--bold);
   }
 
-  footer { padding: 12px 24px 14px; color: var(--dim); }
+  footer { padding: 10px 24px 12px; color: var(--dim); }
   footer > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #status.ok { color: var(--fg); }
   #status.err { color: var(--red); }
   #keys { margin-top: 2px; }
-  #keys b { font-weight: 700; }
 
   @media (max-width: 640px) {
-    main { gap: 20px; padding: 12px 16px 0; }
+    main { gap: 16px; padding: 12px 16px 0; }
     footer { padding: 10px 16px 12px; }
     #sidebar { width: 110px; }
+    #preview { padding: 16px; }
   }
 </style>
 </head>
@@ -188,19 +278,30 @@
   </nav>
   <section id="editorWrap">
     <input id="title" placeholder="Untitled" spellcheck="false">
-    <div id="settings" tabindex="0"></div>
-    <div id="editorBox">
-      <div id="backdrop" aria-hidden="true"></div>
-      <textarea id="editor" spellcheck="false" placeholder="Start typing..."></textarea>
+    <div id="settings" class="screen" tabindex="0"></div>
+    <div id="help" class="screen" tabindex="0"></div>
+    <div id="card">
+      <div class="card-head">
+        <button class="tab" data-mode="write">Write</button>
+        <button class="tab" data-mode="preview">Preview</button>
+        <span class="spacer"></span>
+        <span id="wordCount"></span>
+      </div>
+      <div id="editorBox">
+        <div id="backdrop" aria-hidden="true"></div>
+        <textarea id="editor" spellcheck="false" placeholder="Start typing... # for a heading, - for a list. Paste or drag in images."></textarea>
+      </div>
+      <article id="preview" class="markdown-body"></article>
     </div>
     <div id="defbar"></div>
     <div id="panel"></div>
     <div id="prompt"><span id="promptLabel"></span><input id="promptInput" spellcheck="false" autocomplete="off"></div>
   </section>
 </main>
+<input type="file" id="filePick" accept="image/*" multiple hidden>
 <footer>
   <div id="status"></div>
-  <div id="keys"><b>⌘,</b> settings · <b>⌘D</b> define · <b>⌘S</b> shorthand · <b>⌘⇧S</b> shorthand from selection · <b>Tab</b> expand · <b>⌘L</b> lists · <b>⌘N</b> new · <b>⌘⇧D</b> delete · <b>⌘P</b> push · <b>⌘G</b> GitHub</div>
+  <div id="keys"><b>⌘E</b> preview · <b>⌘/</b> all shortcuts · <b>⌘,</b> settings · <b>⌘T</b> table · <b>⌘⇧C</b> chart · <b>⌘⇧I</b> image · <b>⌘D</b> define · <b>⌘S</b> shorthand · <b>Tab</b> expand</div>
 </footer>
 
 <script>
@@ -229,7 +330,7 @@ let dictionary = load('termnotes.dictionary', {}); // lowercased term -> { term,
 let github = load('termnotes.github', {});
 let currentId = load('termnotes.current', null);
 let settings = {
-  autoExpand: false, names: true, dates: true, terms: true, size: 12.5, showKeys: true,
+  autoExpand: false, names: true, dates: true, terms: true, size: 12.5, showKeys: true, mode: 'write',
   ...load('termnotes.settings', {}),
 };
 
@@ -245,7 +346,7 @@ function newNote(focus = true) {
   notes.unshift(n);
   currentId = n.id;
   persist();
-  if (focus) { render(); titleEl.focus(); }
+  if (focus) { setMode('write'); render(); titleEl.focus(); }
 }
 
 function deleteNote() {
@@ -270,12 +371,19 @@ function render() {
     const div = document.createElement('div');
     div.className = 'note-item' + (note.id === currentId ? ' active' : '');
     div.textContent = note.title || 'Untitled';
-    div.onclick = () => { currentId = note.id; persist(); render(); editor.focus(); };
+    div.onclick = () => { currentId = note.id; persist(); render(); if (settings.mode === 'write') editor.focus(); };
     list.appendChild(div);
   }
   renderPanel();
   renderHighlights();
   updateDefbar();
+  updateWordCount();
+  if (settings.mode === 'preview') renderPreview();
+}
+
+function updateWordCount() {
+  const words = (editor.value.match(/[A-Za-z0-9'’-]+/g) || []).length;
+  $('wordCount').textContent = `${words} word${words === 1 ? '' : 's'}`;
 }
 
 function savedStatus() {
@@ -290,7 +398,7 @@ titleEl.addEventListener('input', () => {
   savedStatus();
 });
 titleEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); editor.focus(); }
+  if (e.key === 'Enter') { e.preventDefault(); setMode('write'); }
 });
 editor.addEventListener('input', () => {
   const n = current();
@@ -298,10 +406,141 @@ editor.addEventListener('input', () => {
   persist();
   renderHighlights();
   updateDefbar();
+  updateWordCount();
   savedStatus();
 });
 editor.addEventListener('scroll', () => { backdrop.scrollTop = editor.scrollTop; });
 document.addEventListener('selectionchange', () => { if (document.activeElement === editor) updateDefbar(); });
+
+// ---- Write / Preview (Cmd+E) ----
+function setMode(mode) {
+  settings.mode = mode;
+  save('termnotes.settings', settings);
+  $('card').classList.toggle('preview', mode === 'preview');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  if (mode === 'preview') renderPreview();
+  else editor.focus();
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+$('preview').addEventListener('dblclick', () => setMode('write'));
+
+// ---- README-style preview: markdown, images, charts ----
+const nativeImages = window.webkit?.messageHandlers?.images;
+
+function renderPreview() {
+  const box = $('preview');
+  const md = editor.value.trim();
+  box.innerHTML = md
+    ? marked.parse(editor.value, { gfm: true })
+    : '<p class="empty">Nothing here yet. Press ⌘E to start writing.</p>';
+  // Local images are stored by the Mac app and served through the tnimg: scheme
+  box.querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src') || '';
+    if (nativeImages && src.startsWith('images/')) img.src = 'tnimg://local/' + encodeURIComponent(src.slice(7));
+  });
+  box.querySelectorAll('a').forEach(a => { a.target = '_blank'; });
+  highlightTextNodes(box);
+  const charts = box.querySelectorAll('pre > code.language-mermaid');
+  if (charts.length) renderCharts(charts);
+}
+
+let mermaidLoading;
+function loadMermaid() {
+  return mermaidLoading ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'vendor/mermaid.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('chart library failed to load'));
+    document.head.appendChild(s);
+  });
+}
+
+// ```mermaid code blocks become charts, the same way GitHub renders them
+async function renderCharts(blocks) {
+  const nodes = [...blocks].map(code => {
+    const div = document.createElement('div');
+    div.className = 'chart';
+    div.textContent = code.textContent;
+    code.parentElement.replaceWith(div);
+    return div;
+  });
+  try {
+    await loadMermaid();
+    // Charts use the app's colours on a transparent background instead of mermaid's grey box
+    const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const fg = css('--fg'), dim = css('--dim');
+    const palette = isDark()
+      ? ['#4493f8', '#8fd694', '#ecc66c', '#f78166', '#bc8cff', '#56d4dd']
+      : ['#0969da', '#1a7f37', '#bf8700', '#cf222e', '#8250df', '#1b7c83'];
+    const pie = Object.fromEntries(palette.map((c, i) => [`pie${i + 1}`, c]));
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      themeVariables: {
+        darkMode: isDark(),
+        background: 'transparent',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+        primaryColor: isDark() ? '#1c2b45' : '#ddf4ff',
+        primaryBorderColor: palette[0],
+        primaryTextColor: fg,
+        textColor: fg,
+        lineColor: dim,
+        ...pie,
+        pieStrokeColor: 'transparent',
+        pieOuterStrokeColor: 'transparent',
+        pieTitleTextColor: fg,
+        pieLegendTextColor: fg,
+        pieSectionTextColor: '#ffffff',
+        xyChart: {
+          backgroundColor: 'transparent',
+          titleColor: fg,
+          xAxisLabelColor: dim, yAxisLabelColor: dim,
+          xAxisTitleColor: fg, yAxisTitleColor: fg,
+          xAxisLineColor: dim, yAxisLineColor: dim,
+          xAxisTickColor: dim, yAxisTickColor: dim,
+          plotColorPalette: palette.join(', '),
+        },
+      },
+    });
+    await mermaid.run({ nodes, suppressErrors: true });
+  } catch (err) {
+    status(`Chart error: ${err.message}`, 'err');
+  }
+}
+
+function isDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+// Colours names/dates/dictionary words in the preview, leaving code, links and headings alone
+function highlightTextNodes(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => n.parentElement.closest('code, pre, a, .chart, h1, h2, h3, h4, h5, h6')
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  for (const node of textNodes) {
+    const text = node.data;
+    const ranges = findRanges(text);
+    if (!ranges.length) continue;
+    const frag = document.createDocumentFragment();
+    let pos = 0;
+    for (const r of ranges) {
+      frag.append(text.slice(pos, r.start));
+      const span = document.createElement('span');
+      span.className = r.cls;
+      span.textContent = text.slice(r.start, r.end);
+      if (r.cls === 'hl-term') span.title = dictionary[span.textContent.toLowerCase()]?.def || '';
+      frag.append(span);
+      pos = r.end;
+    }
+    frag.append(text.slice(pos));
+    node.replaceWith(frag);
+  }
+}
 
 // ---- highlighting: dictionary terms blue, dates, times and names green ----
 const MONTH = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
@@ -322,6 +561,11 @@ const DATE_RE = new RegExp([
   '\\d{1,2}:\\d{2}',
 ].map(p => `\\b${p}(?![\\w])`).join('|'), 'gi');
 const NAME_RE = /\b[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*\b/g;
+// Text ending here means the next word starts a sentence, list item ("- ", "1. ", "- [ ] "), quote, heading or table cell
+const SENTENCE_START_RE = /(?:^|[.!?:|\n])\s*(?:(?:[-*+>]|\d+[.)]|#{1,6})\s+)?(?:\[[ xX]\]\s*)?$/;
+// Markdown in the Write tab: headings bright, image/link syntax and fences dimmed
+const MD_HEADING_RE = /^#{1,6}[ \t].*$/gm;
+const MD_MARK_RE = /!?\[[^\]\n]*\]\([^)\n]*\)|^```.*$/gm;
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -333,7 +577,7 @@ function dictionaryRegex() {
   return new RegExp(parts.join('|'), 'gi');
 }
 
-function findRanges(text) {
+function findRanges(text, markdown = false) {
   const ranges = [];
   const free = (s, e) => !ranges.some(r => s < r.end && e > r.start);
   const add = (re, cls) => {
@@ -341,8 +585,8 @@ function findRanges(text) {
     for (const m of text.matchAll(re)) {
       let start = m.index;
       const end = start + m[0].length;
-      if (cls === 'hl-name' && /(^|[.!?]\s*|\n\s*)$/.test(text.slice(0, start))) {
-        // The first word of a sentence is capitalised anyway, so it isn't treated as a name
+      if (cls === 'hl-name' && SENTENCE_START_RE.test(text.slice(0, start))) {
+        // The first word of a sentence, list item or table cell is capitalised anyway, so it isn't treated as a name
         const gap = m[0].search(/\s/);
         if (gap < 0) continue;
         start += m[0].slice(gap).search(/\S/) + gap;
@@ -350,6 +594,7 @@ function findRanges(text) {
       if (start < end && free(start, end)) ranges.push({ start, end, cls });
     }
   };
+  if (markdown) { add(MD_HEADING_RE, 'hl-md'); add(MD_MARK_RE, 'hl-mark'); }
   if (settings.terms) add(dictionaryRegex(), 'hl-term');
   if (settings.dates) add(DATE_RE, 'hl-date');
   if (settings.names) add(NAME_RE, 'hl-name');
@@ -359,7 +604,7 @@ function findRanges(text) {
 function renderHighlights() {
   const text = editor.value;
   let html = '', pos = 0;
-  for (const r of findRanges(text)) {
+  for (const r of findRanges(text, true)) {
     html += escapeHtml(text.slice(pos, r.start)) + `<span class="${r.cls}">${escapeHtml(text.slice(r.start, r.end))}</span>`;
     pos = r.end;
   }
@@ -374,12 +619,91 @@ function updateDefbar() {
   const re = dictionaryRegex();
   const pos = editor.selectionStart;
   let hit = null;
-  if (re) for (const m of editor.value.matchAll(re)) {
+  if (re && settings.mode === 'write') for (const m of editor.value.matchAll(re)) {
     if (pos >= m.index && pos <= m.index + m[0].length) { hit = dictionary[m[0].toLowerCase()]; break; }
   }
   bar.classList.toggle('open', !!hit);
   if (hit) bar.innerHTML = `⎿  <span class="term">${escapeHtml(hit.term)}</span>: ${escapeHtml(hit.def)}`;
 }
+
+// ---- inserting tables, charts and images ----
+// Inserts at the cursor; `block` makes sure it starts on its own paragraph, as markdown tables need
+function insertText(text, block = false) {
+  if (settings.mode !== 'write') setMode('write');
+  editor.focus();
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0, pos);
+  const lead = before === '' || before.endsWith('\n\n') ? ''
+    : before.endsWith('\n') ? (block ? '\n' : '') : (block ? '\n\n' : '\n');
+  editor.setRangeText(lead + text, pos, editor.selectionEnd, 'end');
+  editor.dispatchEvent(new Event('input'));
+}
+
+async function insertTable() {
+  const size = await ask('Table size, columns x rows:', { value: '3x3' });
+  if (!size) return;
+  const m = size.match(/^(\d+)\s*[x×*, ]\s*(\d+)$/i);
+  if (!m) { status('Type the size like 3x4', 'err'); return; }
+  const cols = Math.min(Math.max(+m[1], 1), 12), rows = Math.min(Math.max(+m[2], 1), 50);
+  const header = '| ' + Array.from({ length: cols }, (_, i) => `Column ${i + 1}`).join(' | ') + ' |';
+  const lines = [header, '|' + ' --- |'.repeat(cols), ...Array(rows).fill('|' + '   |'.repeat(cols))];
+  insertText(lines.join('\n') + '\n\n', true);
+  status('Table added. Fill it in, then ⌘E to see it', 'ok');
+}
+
+const CHARTS = {
+  bar: 'xychart-beta\n    title "Hours studied"\n    x-axis [Mon, Tue, Wed, Thu, Fri]\n    y-axis "Hours" 0 --> 5\n    bar [1, 2.5, 2, 4, 3]',
+  line: 'xychart-beta\n    title "Test scores"\n    x-axis [Test 1, Test 2, Test 3, Test 4]\n    y-axis "Score" 0 --> 100\n    line [62, 70, 78, 91]',
+  pie: 'pie title Where my time goes\n    "School" : 35\n    "Sleep" : 35\n    "Friends" : 20\n    "Other" : 10',
+  flow: 'flowchart LR\n    A[Start] --> B{Done homework?}\n    B -->|Yes| C[Free time]\n    B -->|No| D[Do homework]\n    D --> B',
+};
+
+async function insertChart() {
+  const type = (await ask('Chart type (bar, line, pie, flow):', { value: 'bar' }))?.toLowerCase();
+  if (!type) return;
+  if (!CHARTS[type]) { status('Chart type must be bar, line, pie or flow', 'err'); return; }
+  insertText('```mermaid\n' + CHARTS[type] + '\n```\n\n', true);
+  status('Chart added. Change the labels and numbers, then ⌘E to see it', 'ok');
+}
+
+async function insertImageFile(file) {
+  if (!file.type.startsWith('image/')) return;
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  let src = dataUrl;
+  if (nativeImages) {
+    // The Mac app saves the image next to your notes; pushing to GitHub uploads it to the repo's images/ folder
+    const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg').replace(/[^a-z0-9]/g, '');
+    const name = `img-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    await nativeImages.postMessage({ action: 'save', name, data: dataUrl.split(',')[1] });
+    src = `images/${name}`;
+  }
+  const alt = (file.name || 'image').replace(/\.[^.]+$/, '').replace(/[[\]]/g, '');
+  insertText(`![${alt}](${src})\n`);
+  status('Image added. ⌘E to see it', 'ok');
+}
+
+const imageFiles = list => [...(list || [])].filter(f => f.type.startsWith('image/'));
+editor.addEventListener('paste', e => {
+  const files = imageFiles(e.clipboardData?.files);
+  if (!files.length) return;
+  e.preventDefault();
+  files.forEach(insertImageFile);
+});
+// Stop dropped files from opening in place of the app
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  imageFiles(e.dataTransfer?.files).forEach(insertImageFile);
+});
+$('filePick').addEventListener('change', e => {
+  imageFiles(e.target.files).forEach(insertImageFile);
+  e.target.value = '';
+});
 
 // ---- shorthand expansion: on Tab, or automatically after a space/punctuation if that setting is on ----
 // Replaces a two-letter shorthand ending at `end`; returns the length change, or null if there was none
@@ -455,6 +779,7 @@ function selectedTerm() {
 }
 
 async function defineTerm() {
+  if (settings.mode !== 'write') { status('Switch to Write (⌘E) and select a word first', 'err'); return; }
   const term = selectedTerm();
   if (!term) { status('Select a word first', 'err'); return; }
   if (term.length > 60) { status('Selection is too long to define', 'err'); return; }
@@ -488,7 +813,7 @@ async function askAbbr(label) {
 }
 
 async function shorthandForSelection() {
-  const word = selectedTerm();
+  const word = settings.mode === 'write' ? selectedTerm() : '';
   if (!word) { status('Select a word first', 'err'); return; }
   const abbr = await askAbbr(`Shorthand for "${word}" (2 letters):`);
   if (abbr === null) return;
@@ -545,17 +870,36 @@ function setTheme(mode) {
   else document.documentElement.dataset.theme = mode;
   save('termnotes.theme', mode);
   window.webkit?.messageHandlers?.theme?.postMessage(mode);
+  // Charts are drawn with theme colours, so redraw them
+  if (settings.mode === 'preview') renderPreview();
 }
 
 function toggleTheme() {
-  const t = document.documentElement.dataset.theme;
-  const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = isDark();
   setTheme(dark ? 'light' : 'dark');
   status(dark ? 'Light mode' : 'Dark mode', 'ok');
-  if (settingsOpen()) renderSettings();
+  if (screenOpen() === 'settings') renderSettings();
 }
 
-// ---- settings (Cmd+,) ----
+// ---- full-page screens: settings (Cmd+,) and shortcuts (Cmd+/) ----
+function screenOpen() {
+  return document.querySelector('.screen.active')?.id || null;
+}
+function openScreen(id) {
+  if (promptResolve) return;
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  $('editorWrap').classList.add('screen-open');
+  if (id === 'settings') renderSettings(); else renderHelp();
+  $(id).focus();
+}
+function closeScreen() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('editorWrap').classList.remove('screen-open');
+  if (settings.mode === 'write') editor.focus();
+}
+const openSettings = () => openScreen('settings');
+window.openSettings = openSettings;
+
 const capitalise = s => s[0].toUpperCase() + s.slice(1);
 const SETTINGS = [
   { key: 'autoExpand', label: 'Expand shorthands without pressing Tab', note: 'after a space, punctuation or new line' },
@@ -568,7 +912,6 @@ const SETTINGS = [
 ];
 let settingIndex = 0;
 
-const settingsOpen = () => $('editorWrap').classList.contains('settings-open');
 const settingValue = s => s.key === 'theme' ? load('termnotes.theme', 'system') : settings[s.key];
 
 function applySettings() {
@@ -608,18 +951,6 @@ function renderSettings() {
   });
 }
 
-function openSettings() {
-  if (promptResolve) return;
-  $('editorWrap').classList.add('settings-open');
-  renderSettings();
-  $('settings').focus();
-}
-function closeSettings() {
-  $('editorWrap').classList.remove('settings-open');
-  editor.focus();
-}
-window.openSettings = openSettings;
-
 $('settings').addEventListener('keydown', e => {
   const s = SETTINGS[settingIndex];
   const keys = {
@@ -629,10 +960,55 @@ $('settings').addEventListener('keydown', e => {
     ArrowRight: () => changeSetting(s, 1),
     ' ': () => changeSetting(s, 1),
     Enter: () => changeSetting(s, 1),
-    Escape: closeSettings,
+    Escape: closeScreen,
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
+
+const SHORTCUTS = [
+  ['Writing', [
+    ['⌘E', 'Switch between Write and Preview'],
+    ['⌘T', 'Insert a table'],
+    ['⌘⇧C', 'Insert a chart (bar, line, pie or flow)'],
+    ['⌘⇧I', 'Insert an image (or paste / drag one in)'],
+    ['⌘D', 'Define the selected word'],
+    ['⌘S', 'Add a shorthand'],
+    ['⌘⇧S', 'Make a shorthand for the selected word'],
+    ['Tab', 'Expand a shorthand'],
+  ]],
+  ['Notes', [
+    ['⌘N', 'New note'],
+    ['⌘⇧D', 'Delete note'],
+    ['⌘L', 'Show shorthands and dictionary'],
+    ['⌘P', 'Push note to GitHub as README.md'],
+    ['⌘G', 'Connect or disconnect GitHub'],
+  ]],
+  ['App', [
+    ['⌘,', 'Settings'],
+    ['⌘⇧L', 'Light / dark mode'],
+    ['⌘/', 'This list'],
+  ]],
+  ['Formatting', [
+    ['# Title', 'Heading (## smaller, ### smaller still)'],
+    ['**bold**', 'Bold, *italic*, `code`'],
+    ['- item', 'Bullet list (1. for numbered)'],
+    ['- [ ] task', 'Checklist item, - [x] when done'],
+    ['> quote', 'Quote'],
+    ['[text](url)', 'Link'],
+  ]],
+];
+
+function renderHelp() {
+  const box = $('help');
+  box.innerHTML = '<h2>Shortcuts</h2><div class="hint">Esc to close</div>';
+  for (const [heading, rows] of SHORTCUTS) {
+    box.insertAdjacentHTML('beforeend', `<h3>${heading}</h3>`);
+    for (const [k, v] of rows) {
+      box.insertAdjacentHTML('beforeend', `<div class="keyrow"><b>${escapeHtml(k)}</b><span>${escapeHtml(v)}</span></div>`);
+    }
+  }
+}
+$('help').addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closeScreen(); } });
 
 // ---- GitHub account (Cmd+G) ----
 const nativeGithub = window.webkit?.messageHandlers?.github;
@@ -683,7 +1059,7 @@ window.githubLogin = msg => {
   else if (msg.error) status(`GitHub sign-in failed: ${msg.error}`, 'err');
 };
 
-// ---- GitHub push (Cmd+P) ----
+// ---- GitHub push (Cmd+P): images go to images/, the note to README.md ----
 function toBase64(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
@@ -691,22 +1067,23 @@ function toBase64(str) {
   return btoa(bin);
 }
 
-async function putReadme(repo, content, title) {
-  const url = `https://api.github.com/repos/${repo}/contents/README.md`;
+async function putFile(repo, path, base64, message) {
+  const url = `https://api.github.com/repos/${repo}/contents/${path}`;
   const headers = ghHeaders(github.token);
-  // Updating an existing README requires its current sha
+  // Updating an existing file requires its current sha
   let sha;
   const existing = await fetch(url, { headers });
   if (existing.ok) sha = (await existing.json()).sha;
-  return fetch(url, {
+  const res = await fetch(url, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({
-      message: `Update README from Termnotes: ${title || 'Untitled'}`,
-      content: toBase64(content),
-      ...(sha && { sha }),
-    }),
+    body: JSON.stringify({ message, content: base64, ...(sha && { sha }) }),
   });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('GitHub connection expired, press ⌘G to reconnect');
+    if (res.status === 404) throw new Error(`your account can't write to ${repo}`);
+    throw new Error((await res.json()).message || res.statusText);
+  }
 }
 
 async function pushNote() {
@@ -721,27 +1098,33 @@ async function pushNote() {
   persist();
   save('termnotes.github', github);
 
-  const content = (n.title ? `# ${n.title}\n\n` : '') + n.body + '\n';
   const [owner, name] = repo.split('/');
+  const headers = ghHeaders(github.token);
   status(`Pushing to ${repo}...`, '', 0);
 
   try {
-    let res = await putReadme(repo, content, n.title);
-    if (res.status === 404 && owner.toLowerCase() === (github.login || '').toLowerCase()
-        && confirm(`${repo} doesn't exist yet. Create it as a private repo?`)) {
+    const check = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+    if (check.status === 401) throw new Error('GitHub connection expired, press ⌘G to reconnect');
+    if (check.status === 404) {
+      const mine = owner.toLowerCase() === (github.login || '').toLowerCase();
+      if (!mine || !confirm(`${repo} doesn't exist yet. Create it as a private repo?`)) {
+        throw new Error(`repo ${repo} not found`);
+      }
       const created = await fetch('https://api.github.com/user/repos', {
-        method: 'POST',
-        headers: ghHeaders(github.token),
-        body: JSON.stringify({ name, private: true }),
+        method: 'POST', headers, body: JSON.stringify({ name, private: true }),
       });
       if (!created.ok) throw new Error((await created.json()).message || created.statusText);
-      res = await putReadme(repo, content, n.title);
     }
-    if (!res.ok) {
-      if (res.status === 401) throw new Error('GitHub connection expired, press ⌘G to reconnect');
-      if (res.status === 404) throw new Error(`repo ${repo} not found, or your account can't write to it`);
-      throw new Error((await res.json()).message || res.statusText);
+
+    const images = [...new Set([...n.body.matchAll(/\]\(images\/([\w.-]+)\)/g)].map(m => m[1]))];
+    for (const [i, img] of images.entries()) {
+      status(`Uploading image ${i + 1} of ${images.length}...`, '', 0);
+      const data = nativeImages && await nativeImages.postMessage({ action: 'read', name: img });
+      if (data) await putFile(repo, `images/${img}`, data, `Add image ${img} from Termnotes`);
     }
+
+    const content = (n.title ? `# ${n.title}\n\n` : '') + n.body + '\n';
+    await putFile(repo, 'README.md', toBase64(content), `Update README from Termnotes: ${n.title || 'Untitled'}`);
     status(`Pushed to github.com/${repo}`, 'ok');
   } catch (err) {
     status(`Push failed: ${err.message}`, 'err');
@@ -751,13 +1134,22 @@ async function pushNote() {
 // ---- global shortcuts ----
 document.addEventListener('keydown', e => {
   if (promptResolve || !e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.code === 'Comma') {
+  const screens = { Comma: 'settings', Slash: 'help' };
+  if (screens[e.code]) {
     e.preventDefault();
-    settingsOpen() ? closeSettings() : openSettings();
+    screenOpen() === screens[e.code] ? closeScreen() : openScreen(screens[e.code]);
     return;
   }
-  if (settingsOpen()) return;
-  const actions = e.shiftKey ? { KeyD: deleteNote, KeyL: toggleTheme, KeyS: shorthandForSelection } : {
+  if (screenOpen()) return;
+  const actions = e.shiftKey ? {
+    KeyD: deleteNote,
+    KeyL: toggleTheme,
+    KeyS: shorthandForSelection,
+    KeyC: insertChart,
+    KeyI: () => $('filePick').click(),
+  } : {
+    KeyE: () => setMode(settings.mode === 'write' ? 'preview' : 'write'),
+    KeyT: insertTable,
     KeyD: defineTerm,
     KeyS: addShorthand,
     KeyL: () => $('panel').classList.toggle('open'),
@@ -779,12 +1171,12 @@ function status(msg, kind = '', ms = kind === 'err' ? 6000 : 3000) {
 }
 
 render();
+setMode(settings.mode);
 renderAccount();
 applySettings();
 status('Ready', '', 0);
 // Older versions saved a pasted token without the username
 if (github.token && !github.login) finishConnect(github.token);
-editor.focus();
 </script>
 </body>
 </html>

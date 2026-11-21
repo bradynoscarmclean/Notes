@@ -14,6 +14,7 @@ rm build/Termnotes-arm64 build/Termnotes-x86_64
 
 cp app/Info.plist "$APP/Contents/"
 cp index.html "$APP/Contents/Resources/"
+cp -R vendor "$APP/Contents/Resources/"
 [ -f app/AppIcon.icns ] && cp app/AppIcon.icns "$APP/Contents/Resources/"
 
 codesign --force --deep --sign - "$APP"

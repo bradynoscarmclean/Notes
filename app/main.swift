@@ -1,18 +1,23 @@
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply,
+                         WKUIDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var webView: WKWebView!
     var store: [String: String] = [:]
 
-    // Notes, shorthands and settings live in ~/Library/Application Support/Termnotes/store.json
-    let storeURL: URL = {
+    // Notes, shorthands and settings live in ~/Library/Application Support/Termnotes/store.json,
+    // pasted images in the images/ folder next to it
+    static let supportDir: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Termnotes", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("store.json")
+        try? FileManager.default.createDirectory(at: dir.appendingPathComponent("images"), withIntermediateDirectories: true)
+        return dir
     }()
+    let storeURL = AppDelegate.supportDir.appendingPathComponent("store.json")
+    let imagesDir = AppDelegate.supportDir.appendingPathComponent("images", isDirectory: true)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -31,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         config.userContentController.add(self, name: "store")
         config.userContentController.add(self, name: "github")
         config.userContentController.add(self, name: "theme")
+        config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "images")
+        config.setURLSchemeHandler(ImageSchemeHandler(dir: imagesDir), forURLScheme: "tnimg")
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680),
@@ -52,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         webView = WKWebView(frame: blur.bounds, configuration: config)
         webView.uiDelegate = self
+        webView.navigationDelegate = self
         webView.setValue(false, forKey: "drawsBackground")
         webView.autoresizingMask = [.width, .height]
         blur.addSubview(webView)
@@ -99,6 +107,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if let data = try? JSONSerialization.data(withJSONObject: store) {
             try? data.write(to: storeURL, options: .atomic)
         }
+    }
+
+    // MARK: Images
+    // await window.webkit.messageHandlers.images.postMessage({action: "save", name, data}) or ({action: "read", name})
+    // `data` is base64; images are only ever read/written by bare file name inside imagesDir
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
+                               replyHandler: @escaping (Any?, String?) -> Void) {
+        guard let body = message.body as? [String: Any],
+              let name = body["name"] as? String,
+              name.range(of: #"^[\w.-]+$"#, options: .regularExpression) != nil, !name.hasPrefix(".") else {
+            replyHandler(nil, "bad image name")
+            return
+        }
+        let file = imagesDir.appendingPathComponent(name)
+        switch body["action"] as? String {
+        case "save":
+            guard let base64 = body["data"] as? String, let data = Data(base64Encoded: base64) else {
+                replyHandler(nil, "bad image data")
+                return
+            }
+            do {
+                try data.write(to: file, options: .atomic)
+                replyHandler(name, nil)
+            } catch {
+                replyHandler(nil, error.localizedDescription)
+            }
+        case "read":
+            replyHandler((try? Data(contentsOf: file))?.base64EncodedString(), nil)
+        default:
+            replyHandler(nil, "unknown action")
+        }
+    }
+
+    // <input type="file"> needs this to show a file picker
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.allowedContentTypes = [.image]
+        panel.beginSheetModal(for: window) { completionHandler($0 == .OK ? panel.urls : nil) }
+    }
+
+    // MARK: Links open in the default browser instead of replacing the app
+
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = action.request.url, !url.isFileURL, url.scheme != "about" else {
+            decisionHandler(.allow)
+            return
+        }
+        if action.targetFrame?.isMainFrame ?? true { NSWorkspace.shared.open(url) }
+        decisionHandler(.cancel)
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = action.request.url { NSWorkspace.shared.open(url) }
+        return nil
     }
 
     // MARK: GitHub sign-in (OAuth device flow)
@@ -237,6 +303,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         NSApp.mainMenu = main
     }
+}
+
+// Serves tnimg://local/<name> from the images folder so the page can show pasted images
+final class ImageSchemeHandler: NSObject, WKURLSchemeHandler {
+    let dir: URL
+    init(dir: URL) { self.dir = dir }
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url,
+              url.lastPathComponent.range(of: #"^[\w.-]+$"#, options: .regularExpression) != nil,
+              let data = try? Data(contentsOf: dir.appendingPathComponent(url.lastPathComponent)) else {
+            task.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+        task.didReceive(URLResponse(url: url, mimeType: mime, expectedContentLength: data.count, textEncodingName: nil))
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
 final class DragStrip: NSView {

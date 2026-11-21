@@ -1,6 +1,6 @@
 # Termnotes
 
-A simple Mac notes app with a translucent, terminal-style look, two-letter shorthands, and your own dictionary. Names, dates and times are highlighted green, dictionary words blue. Light and dark mode.
+A Mac notes app with a translucent, terminal-style editor and a GitHub README-style preview. Add tables, charts and images, define words in your own dictionary, and use two-letter shorthands. Names, dates and times are highlighted green, dictionary words blue. Light and dark mode.
 
 ## Download
 
@@ -12,19 +12,26 @@ The first time you open it, macOS will block it because it isn't from the App St
 
 | Keys | Action |
 | --- | --- |
-| ⌘D | Define the selected word (shows in blue; put the cursor on it to see the definition) |
+| ⌘E | Switch between Write and Preview |
+| ⌘T | Insert a table |
+| ⌘⇧C | Insert a chart (bar, line, pie or flow) |
+| ⌘⇧I | Insert an image (you can also paste or drag one in) |
+| ⌘D | Define the selected word |
 | ⌘S | Add a shorthand (2 letters → full word) |
 | ⌘⇧S | Make a shorthand for the selected word |
 | Tab | Expand the shorthand before the cursor |
 | ⌘L | Show/hide your shorthands and dictionary |
 | ⌘N | New note |
 | ⌘⇧D | Delete note |
-| ⌘P | Push the current note to a GitHub repo as README.md |
+| ⌘P | Push the note to a GitHub repo as README.md (images go to images/) |
 | ⌘G | Connect or disconnect your GitHub account |
 | ⌘⇧L | Switch between light and dark mode |
-| ⌘, | Settings (auto-expand shorthands, highlighting, text size, theme) |
+| ⌘, | Settings |
+| ⌘/ | Show all shortcuts |
 
-Notes are saved in `~/Library/Application Support/Termnotes/store.json`.
+Notes are written in Markdown, the same format GitHub READMEs use, so a pushed note looks the same on GitHub as in the Preview tab. Charts are [Mermaid](https://mermaid.js.org) code blocks, which GitHub also draws as charts.
+
+Notes are saved in `~/Library/Application Support/Termnotes/store.json`, and images in the `images` folder next to it.
 
 ## Building
 
