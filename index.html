@@ -4,67 +4,99 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Termnotes</title>
+<script>
+  // Set the theme before first paint so there's no flash
+  try {
+    if (window.nativeStore) document.documentElement.classList.add('native');
+    const t = JSON.parse(window.nativeStore ? window.nativeStore['termnotes.theme'] : localStorage.getItem('termnotes.theme'));
+    if (t) document.documentElement.dataset.theme = t;
+  } catch {}
+</script>
 <style>
   :root {
-    --bg: #1e1f22;
-    --sidebar: #191a1c;
-    --fg: #e4e4e4;
-    --dim: #7d8088;
-    --line: #2d2f33;
-    --hover: #26282c;
-    --active: #2f3238;
-    --yellow: #e5c07b;
-    --blue: #61afef;
-    --red: #e06c75;
-    --selection: rgba(120, 150, 200, 0.28);
+    --fg: #e4e7ec;
+    --bold: #ffffff;
+    --dim: #8a93a5;
+    --green: #8fd694;
+    --blue: #7cc0ff;
+    --red: #f28b82;
+    --rule: rgba(255, 255, 255, 0.13);
+    --selection: rgba(124, 192, 255, 0.28);
+    --tint: rgba(17, 23, 37, 0.55);
+    --fallback: linear-gradient(105deg, #191d29 0%, #1e2536 55%, #2a3652 100%);
   }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --fg: #24292f; --bold: #000000; --dim: #6e7781; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
+      --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
+      --tint: rgba(255, 255, 255, 0.5);
+      --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
+    }
+  }
+  :root[data-theme="light"] {
+    --fg: #24292f; --bold: #000000; --dim: #6e7781; --green: #1a7f37; --blue: #0969da; --red: #cf222e;
+    --rule: rgba(0, 0, 0, 0.12); --selection: rgba(9, 105, 218, 0.18);
+    --tint: rgba(255, 255, 255, 0.5);
+    --fallback: linear-gradient(105deg, #f7f8fa 0%, #eef1f6 55%, #e3e9f3 100%);
+  }
+
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
-    background: var(--bg);
+    background: var(--fallback);
     color: var(--fg);
-    font: 14px/1.65 "SF Mono", Menlo, Monaco, Consolas, monospace;
+    font: 13.5px/1.6 "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
     display: flex;
     flex-direction: column;
   }
-  main { flex: 1; display: flex; min-height: 0; }
-  #sidebar {
-    width: 220px;
-    background: var(--sidebar);
-    border-right: 1px solid var(--line);
-    overflow-y: auto;
-    padding: 10px 0;
-  }
+  /* In the Mac app the window itself is see-through and blurred; the page just adds a tint */
+  html.native body { background: var(--tint); padding-top: 28px; }
+  b, strong { color: var(--bold); font-weight: 700; }
+  .dim { color: var(--dim); }
+
+  main { flex: 1; display: flex; gap: 36px; min-height: 0; padding: 14px 24px 0; }
+
+  #sidebar { width: 190px; flex-shrink: 0; display: flex; flex-direction: column; }
+  #notesHeader { color: var(--dim); margin-bottom: 8px; }
+  #noteList { flex: 1; overflow-y: auto; scrollbar-width: none; }
+  #noteList::-webkit-scrollbar { display: none; }
   .note-item {
-    padding: 3px 16px;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--dim);
   }
-  .note-item:hover { background: var(--hover); color: var(--fg); }
-  .note-item.active { background: var(--active); color: var(--fg); }
+  .note-item::before { content: "  "; white-space: pre; }
+  .note-item:hover { color: var(--fg); }
+  .note-item.active { color: var(--bold); font-weight: 700; }
+  .note-item.active::before { content: "● "; }
+  #account { color: var(--dim); padding: 10px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   #editorWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .titleRow { display: flex; color: var(--bold); }
+  .titleRow .bullet { width: 2ch; flex-shrink: 0; }
   #title {
+    flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     outline: none;
-    color: var(--fg);
+    padding: 0;
+    color: var(--bold);
     font: inherit;
-    font-weight: 600;
-    padding: 16px 20px 0;
+    font-weight: 700;
   }
   #title::placeholder { color: var(--dim); font-weight: normal; }
 
   /* The textarea sits on top with invisible text; the backdrop underneath draws the coloured text */
-  #editorBox { position: relative; flex: 1; min-height: 0; }
+  #editorBox { position: relative; flex: 1; min-height: 0; margin-top: 2px; }
   #backdrop, #editor {
     position: absolute;
     inset: 0;
     margin: 0;
     border: none;
-    padding: 8px 20px 20px;
+    padding: 0 0 24px 2ch;
     font: inherit;
     white-space: pre-wrap;
     overflow-wrap: break-word;
@@ -77,83 +109,70 @@
   #editor {
     background: transparent;
     color: transparent;
-    caret-color: var(--fg);
+    caret-color: var(--bold);
     outline: none;
     resize: none;
   }
   #editor::selection { background: var(--selection); }
   #editor::placeholder { color: var(--dim); }
-  .hl-name, .hl-date { color: var(--yellow); }
-  .hl-term { color: var(--blue); text-decoration: underline dotted rgba(97, 175, 239, 0.6); text-underline-offset: 3px; }
+  .hl-name, .hl-date { color: var(--green); }
+  .hl-term { color: var(--blue); }
 
-  #defbar {
-    display: none;
-    border-top: 1px solid var(--line);
-    padding: 6px 20px;
-  }
+  #defbar { display: none; color: var(--dim); padding: 8px 0 0 2ch; }
   #defbar.open { display: block; }
   #defbar .term { color: var(--blue); }
-  #defbar .dim { color: var(--dim); }
 
-  #panel {
-    display: none;
-    border-top: 1px solid var(--line);
-    padding: 8px 20px;
-    max-height: 32vh;
-    overflow-y: auto;
-  }
+  #panel { display: none; padding: 10px 0 0 2ch; max-height: 34vh; overflow-y: auto; scrollbar-width: none; }
   #panel.open { display: block; }
-  #panel .heading { color: var(--dim); margin-top: 6px; }
+  #panel .heading { margin-top: 10px; }
   #panel .heading:first-child { margin-top: 0; }
-  #panel .row { display: flex; gap: 12px; }
-  #panel .abbr { color: var(--yellow); min-width: 3ch; }
+  #panel .row { padding-left: 2ch; }
   #panel .term { color: var(--blue); }
-  #panel .dim { color: var(--dim); }
 
   #prompt {
     display: none;
-    border-top: 1px solid var(--line);
-    background: var(--sidebar);
-    padding: 7px 20px;
+    margin-top: 10px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 6px 0;
     align-items: center;
-    gap: 8px;
   }
   #prompt.open { display: flex; }
-  #promptLabel { color: var(--dim); white-space: nowrap; }
+  #promptLabel { color: var(--dim); white-space: pre; }
   #promptInput {
     flex: 1;
     background: transparent;
     border: none;
     outline: none;
+    padding: 0;
     color: var(--fg);
     font: inherit;
-    caret-color: var(--fg);
+    caret-color: var(--bold);
   }
-  footer {
-    padding: 4px 20px;
-    background: var(--sidebar);
-    border-top: 1px solid var(--line);
-    color: var(--dim);
-    font-size: 12px;
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    white-space: nowrap;
-    overflow: hidden;
-  }
-  footer kbd { color: var(--fg); font: inherit; }
+
+  footer { padding: 12px 24px 14px; color: var(--dim); }
+  footer > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #status.ok { color: var(--fg); }
   #status.err { color: var(--red); }
-  @media (max-width: 600px) {
-    #sidebar { width: 120px; }
+  #keys { margin-top: 2px; }
+  #keys b { font-weight: 700; }
+
+  @media (max-width: 640px) {
+    main { gap: 20px; padding: 12px 16px 0; }
+    footer { padding: 10px 16px 12px; }
+    #sidebar { width: 110px; }
   }
 </style>
 </head>
 <body>
 <main>
-  <nav id="sidebar"><div id="noteList"></div></nav>
+  <nav id="sidebar">
+    <div id="notesHeader"></div>
+    <div id="noteList"></div>
+    <div id="account"></div>
+  </nav>
   <section id="editorWrap">
-    <input id="title" placeholder="Untitled" spellcheck="false">
+    <div class="titleRow"><span class="bullet">●</span><input id="title" placeholder="Untitled" spellcheck="false"></div>
     <div id="editorBox">
       <div id="backdrop" aria-hidden="true"></div>
       <textarea id="editor" spellcheck="false" placeholder="Start typing..."></textarea>
@@ -164,8 +183,8 @@
   </section>
 </main>
 <footer>
-  <span><kbd>⌘D</kbd> define · <kbd>⌥S</kbd> shorthand · <kbd>Tab</kbd> expand · <kbd>⌥L</kbd> lists · <kbd>⌥N</kbd> new · <kbd>⌥D</kbd> delete · <kbd>⌥P</kbd> push to GitHub · <kbd>⌥G</kbd> token</span>
-  <span id="status"></span>
+  <div id="status"></div>
+  <div id="keys"><b>⌘D</b> define · <b>⌘S</b> shorthand · <b>Tab</b> expand · <b>⌘L</b> lists · <b>⌘N</b> new · <b>⌘⇧D</b> delete · <b>⌘P</b> push · <b>⌘G</b> GitHub · <b>⌘⇧L</b> light/dark</div>
 </footer>
 
 <script>
@@ -224,6 +243,7 @@ function render() {
   const n = current();
   titleEl.value = n.title;
   editor.value = n.body;
+  $('notesHeader').innerHTML = `Listed <b>${notes.length}</b> note${notes.length === 1 ? '' : 's'}`;
   const list = $('noteList');
   list.innerHTML = '';
   for (const note of notes) {
@@ -238,11 +258,16 @@ function render() {
   updateDefbar();
 }
 
+function savedStatus() {
+  status(`Saved · ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`, '', 0);
+}
+
 titleEl.addEventListener('input', () => {
   const n = current();
   n.title = titleEl.value; n.updated = Date.now();
   persist();
   render();
+  savedStatus();
 });
 titleEl.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); editor.focus(); }
@@ -253,23 +278,29 @@ editor.addEventListener('input', () => {
   persist();
   renderHighlights();
   updateDefbar();
+  savedStatus();
 });
 editor.addEventListener('scroll', () => { backdrop.scrollTop = editor.scrollTop; });
 document.addEventListener('selectionchange', () => { if (document.activeElement === editor) updateDefbar(); });
 
-// ---- highlighting: dictionary terms blue, dates and names yellow ----
-const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
+// ---- highlighting: dictionary terms blue, dates, times and names green ----
+const MONTH = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
 const DAY = '\\d{1,2}(?:st|nd|rd|th)?';
 const DATE_RE = new RegExp([
   '\\d{4}-\\d{1,2}-\\d{1,2}',
   '\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?',
+  // Dashes and dots need a year, so "5-6 people" and "1.5" aren't dates
+  '\\d{1,2}([.-])\\d{1,2}\\1\\d{2,4}',
   `${MONTH}\\.?\\s+${DAY}(?:,?\\s+\\d{4})?`,
   `${DAY}\\s+(?:of\\s+)?${MONTH}(?:,?\\s+\\d{4})?`,
   `${MONTH}\\s+\\d{4}`,
-  '(?:January|February|March|April|June|July|August|September|October|November|December)',
-  '(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day',
-  '(?:[Tt]oday|[Tt]omorrow|[Yy]esterday)',
-].map(p => `\\b${p}\\b`).join('|'), 'g');
+  // "May" and "March" on their own are too often ordinary words
+  '(?:january|february|april|june|july|august|september|october|november|december)',
+  '(?:(?:next|last|this)\\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day',
+  '(?:today|tonight|tomorrow|yesterday)',
+  '\\d{1,2}(?::\\d{2})?\\s?[ap]\\.?m\\.?',
+  '\\d{1,2}:\\d{2}',
+].map(p => `\\b${p}(?![\\w])`).join('|'), 'gi');
 const NAME_RE = /\b[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*\b/g;
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -327,7 +358,7 @@ function updateDefbar() {
     if (pos >= m.index && pos <= m.index + m[0].length) { hit = dictionary[m[0].toLowerCase()]; break; }
   }
   bar.classList.toggle('open', !!hit);
-  if (hit) bar.innerHTML = `<span class="term">${escapeHtml(hit.term)}</span> <span class="dim">·</span> ${escapeHtml(hit.def)}`;
+  if (hit) bar.innerHTML = `⎿  <span class="term">${escapeHtml(hit.term)}</span>: ${escapeHtml(hit.def)}`;
 }
 
 // ---- shorthand expansion on Tab ----
@@ -355,7 +386,7 @@ let promptResolve = null, returnFocus = null;
 
 function ask(label, { value = '', maxLength, secret = false } = {}) {
   if (!promptResolve) returnFocus = document.activeElement;
-  promptLabel.textContent = label;
+  promptLabel.textContent = `❯ ${label} `;
   promptInput.value = value;
   promptInput.type = secret ? 'password' : 'text';
   if (maxLength) promptInput.maxLength = maxLength; else promptInput.removeAttribute('maxlength');
@@ -410,7 +441,7 @@ async function defineTerm() {
   updateDefbar();
 }
 
-// ---- shorthand (Option+S) ----
+// ---- shorthand (Cmd+S) ----
 async function addShorthand() {
   let abbr;
   while (true) {
@@ -440,33 +471,84 @@ function renderPanel() {
   const box = $('panel');
   box.innerHTML = '';
   const section = (title, entries, emptyMsg, keyClass) => {
-    box.insertAdjacentHTML('beforeend', `<div class="heading">${title}</div>`);
-    if (!entries.length) box.insertAdjacentHTML('beforeend', `<div class="dim">${emptyMsg}</div>`);
+    box.insertAdjacentHTML('beforeend', `<div class="heading"><b>${title}</b></div>`);
+    if (!entries.length) box.insertAdjacentHTML('beforeend', `<div class="row dim">${emptyMsg}</div>`);
     for (const [k, v] of entries) {
       const row = document.createElement('div');
       row.className = 'row';
-      row.innerHTML = `<span class="${keyClass}"></span><span class="dim">→</span><span></span>`;
+      row.innerHTML = `<span class="${keyClass}"></span> <span class="dim">→</span> <span></span>`;
       row.children[0].textContent = k;
       row.children[2].textContent = v;
       box.appendChild(row);
     }
   };
   section('Shorthands', Object.keys(shorthands).sort().map(k => [k, shorthands[k]]),
-    'None yet. Press ⌥S to add one.', 'abbr');
+    'None yet. Press ⌘S to add one.', '');
   section('Dictionary', Object.values(dictionary).sort((a, b) => a.term.localeCompare(b.term)).map(d => [d.term, d.def]),
     'None yet. Select a word and press ⌘D.', 'term');
 }
 
-// ---- GitHub push (Option+P) ----
-async function setToken() {
-  const token = await ask('GitHub token (blank = forget):', { secret: true });
-  if (token === null) return false;
-  if (token) { github.token = token; status('Token saved', 'ok'); }
-  else { delete github.token; status('Token removed', 'ok'); }
-  save('termnotes.github', github);
-  return !!token;
+// ---- light / dark (Cmd+Shift+L) ----
+function toggleTheme() {
+  const t = document.documentElement.dataset.theme;
+  const dark = t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = dark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  save('termnotes.theme', next);
+  window.webkit?.messageHandlers?.theme?.postMessage(next);
+  status(next === 'light' ? 'Light mode' : 'Dark mode', 'ok');
 }
 
+// ---- GitHub account (Cmd+G) ----
+const nativeGithub = window.webkit?.messageHandlers?.github;
+const ghHeaders = token => ({ Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' });
+
+function renderAccount() {
+  const el = $('account');
+  if (github.login) el.innerHTML = `GitHub <b></b>`, el.querySelector('b').textContent = '@' + github.login;
+  else el.innerHTML = 'GitHub off · <b>⌘G</b>';
+}
+
+async function connectGithub() {
+  if (github.token) {
+    if (!confirm(`Disconnect GitHub account @${github.login || 'unknown'}?`)) return;
+    github = { repo: github.repo };
+    save('termnotes.github', github);
+    renderAccount();
+    status('GitHub disconnected', 'ok');
+    return;
+  }
+  if (nativeGithub && window.hasGitHubApp) {
+    // The Mac app runs GitHub's sign-in and calls window.githubLogin with the progress
+    status('Opening GitHub sign-in...');
+    nativeGithub.postMessage({ action: 'login' });
+    return;
+  }
+  const token = await ask('GitHub token:', { secret: true });
+  if (token) finishConnect(token);
+}
+
+async function finishConnect(token) {
+  try {
+    const res = await fetch('https://api.github.com/user', { headers: ghHeaders(token) });
+    if (!res.ok) throw new Error(res.status === 401 ? 'GitHub rejected the sign-in' : res.statusText);
+    github.token = token;
+    github.login = (await res.json()).login;
+    save('termnotes.github', github);
+    renderAccount();
+    status(`Connected to GitHub as @${github.login}`, 'ok');
+  } catch (err) {
+    status(`GitHub connect failed: ${err.message}`, 'err');
+  }
+}
+
+window.githubLogin = msg => {
+  if (msg.code) status(`In your browser, enter code ${msg.code} (already copied)`, 'ok', 0);
+  else if (msg.token) finishConnect(msg.token);
+  else if (msg.error) status(`GitHub sign-in failed: ${msg.error}`, 'err');
+};
+
+// ---- GitHub push (Cmd+P) ----
 function toBase64(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
@@ -474,44 +556,55 @@ function toBase64(str) {
   return btoa(bin);
 }
 
+async function putReadme(repo, content, title) {
+  const url = `https://api.github.com/repos/${repo}/contents/README.md`;
+  const headers = ghHeaders(github.token);
+  // Updating an existing README requires its current sha
+  let sha;
+  const existing = await fetch(url, { headers });
+  if (existing.ok) sha = (await existing.json()).sha;
+  return fetch(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({
+      message: `Update README from Termnotes: ${title || 'Untitled'}`,
+      content: toBase64(content),
+      ...(sha && { sha }),
+    }),
+  });
+}
+
 async function pushNote() {
   const n = current();
-  if (!github.token && !(await setToken())) return;
+  if (!github.token) { status('Connect your GitHub account first (⌘G)', 'err'); return; }
 
-  const repo = await ask('Push README.md to repo (owner/name):', { value: n.repo || github.repo || '' });
+  let repo = await ask('Push README.md to repo:', { value: n.repo || github.repo || '' });
   if (!repo) return;
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { status('Repo must look like owner/name', 'err'); return; }
+  if (!repo.includes('/') && github.login) repo = `${github.login}/${repo}`;
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { status('Repo must look like name or owner/name', 'err'); return; }
   n.repo = github.repo = repo;
   persist();
   save('termnotes.github', github);
 
-  const url = `https://api.github.com/repos/${repo}/contents/README.md`;
-  const headers = {
-    Authorization: `Bearer ${github.token}`,
-    Accept: 'application/vnd.github+json',
-  };
   const content = (n.title ? `# ${n.title}\n\n` : '') + n.body + '\n';
-  status(`Pushing to ${repo}...`);
+  const [owner, name] = repo.split('/');
+  status(`Pushing to ${repo}...`, '', 0);
 
   try {
-    // Updating an existing README requires its current sha
-    let sha;
-    const existing = await fetch(url, { headers });
-    if (existing.ok) sha = (await existing.json()).sha;
-    else if (existing.status === 401) throw new Error('bad token (press ⌥G to set a new one)');
-
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        message: `Update README from Termnotes: ${n.title || 'Untitled'}`,
-        content: toBase64(content),
-        ...(sha && { sha }),
-      }),
-    });
+    let res = await putReadme(repo, content, n.title);
+    if (res.status === 404 && owner.toLowerCase() === (github.login || '').toLowerCase()
+        && confirm(`${repo} doesn't exist yet. Create it as a private repo?`)) {
+      const created = await fetch('https://api.github.com/user/repos', {
+        method: 'POST',
+        headers: ghHeaders(github.token),
+        body: JSON.stringify({ name, private: true }),
+      });
+      if (!created.ok) throw new Error((await created.json()).message || created.statusText);
+      res = await putReadme(repo, content, n.title);
+    }
     if (!res.ok) {
-      if (res.status === 401) throw new Error('bad token (press ⌥G to set a new one)');
-      if (res.status === 404) throw new Error(`repo ${repo} not found, or the token can't write to it`);
+      if (res.status === 401) throw new Error('GitHub connection expired, press ⌘G to reconnect');
+      if (res.status === 404) throw new Error(`repo ${repo} not found, or your account can't write to it`);
       throw new Error((await res.json()).message || res.statusText);
     }
     status(`Pushed to github.com/${repo}`, 'ok');
@@ -520,36 +613,35 @@ async function pushNote() {
   }
 }
 
-// ---- global shortcuts (use e.code: Option+S on a Mac types "ß") ----
+// ---- global shortcuts ----
 document.addEventListener('keydown', e => {
-  if (promptResolve || e.ctrlKey) return;
-  if (e.metaKey && !e.altKey && !e.shiftKey && e.code === 'KeyD') {
-    e.preventDefault();
-    defineTerm();
-    return;
-  }
-  if (!e.altKey || e.metaKey) return;
-  const actions = {
+  if (promptResolve || !e.metaKey || e.ctrlKey || e.altKey) return;
+  const actions = e.shiftKey ? { KeyD: deleteNote, KeyL: toggleTheme } : {
+    KeyD: defineTerm,
     KeyS: addShorthand,
     KeyL: () => $('panel').classList.toggle('open'),
     KeyN: newNote,
-    KeyD: deleteNote,
     KeyP: pushNote,
-    KeyG: setToken,
+    KeyG: connectGithub,
   };
   if (actions[e.code]) { e.preventDefault(); actions[e.code](); }
 });
 
+// ms = 0 keeps the message up until the next one
 let statusTimer;
-function status(msg, kind = '') {
+function status(msg, kind = '', ms = kind === 'err' ? 6000 : 3000) {
   const s = $('status');
-  s.textContent = msg;
+  s.textContent = `✻ ${msg}`;
   s.className = kind;
   clearTimeout(statusTimer);
-  statusTimer = setTimeout(() => { s.textContent = ''; }, kind === 'err' ? 6000 : 3000);
+  if (ms) statusTimer = setTimeout(() => { s.textContent = '✻ Ready'; s.className = ''; }, ms);
 }
 
 render();
+renderAccount();
+status('Ready', '', 0);
+// Older versions saved a pasted token without the username
+if (github.token && !github.login) finishConnect(github.token);
 editor.focus();
 </script>
 </body>

@@ -25,23 +25,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         let config = WKWebViewConfiguration()
         config.userContentController.addUserScript(WKUserScript(
-            source: "window.nativeStore = \(storeJSON);",
+            source: "window.nativeStore = \(storeJSON); window.hasGitHubApp = \(gitHubClientID != nil);",
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true))
         config.userContentController.add(self, name: "store")
-
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.uiDelegate = self
-        webView.setValue(false, forKey: "drawsBackground")
+        config.userContentController.add(self, name: "github")
+        config.userContentController.add(self, name: "theme")
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 680),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = "Termnotes"
-        window.backgroundColor = NSColor(red: 0.118, green: 0.122, blue: 0.133, alpha: 1)
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.contentView = webView
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        applyTheme(store["termnotes.theme"].map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\"")) })
+
+        // See-through blurred background, like a translucent terminal; the page draws a tint on top
+        let blur = NSVisualEffectView()
+        blur.material = .underWindowBackground
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        window.contentView = blur
+
+        webView = WKWebView(frame: blur.bounds, configuration: config)
+        webView.uiDelegate = self
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.autoresizingMask = [.width, .height]
+        blur.addSubview(webView)
+
+        // The web view covers the title bar, so this strip keeps the window draggable
+        let dragStrip = DragStrip(frame: NSRect(x: 0, y: blur.bounds.height - 28, width: blur.bounds.width, height: 28))
+        dragStrip.autoresizingMask = [.width, .minYMargin]
+        blur.addSubview(dragStrip)
+
         window.center()
         window.setFrameAutosaveName("TermnotesMain")
         window.makeKeyAndOrderFront(nil)
@@ -53,8 +72,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    // nil follows the system setting
+    func applyTheme(_ mode: String?) {
+        switch mode {
+        case "light": window.appearance = NSAppearance(named: .aqua)
+        case "dark": window.appearance = NSAppearance(named: .darkAqua)
+        default: window.appearance = nil
+        }
+    }
+
     // Page calls window.webkit.messageHandlers.store.postMessage({key, value})
+    // and window.webkit.messageHandlers.github.postMessage({action: "login"})
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "github" {
+            startGitHubLogin()
+            return
+        }
+        if message.name == "theme" {
+            applyTheme(message.body as? String)
+            return
+        }
         guard let body = message.body as? [String: Any],
               let key = body["key"] as? String,
               let value = body["value"] as? String else { return }
@@ -62,6 +99,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         if let data = try? JSONSerialization.data(withJSONObject: store) {
             try? data.write(to: storeURL, options: .atomic)
         }
+    }
+
+    // MARK: GitHub sign-in (OAuth device flow)
+    // Runs here rather than in the page because GitHub's login endpoints don't allow browser requests.
+
+    struct GitHubError: Error { let message: String }
+    var gitHubLoginRunning = false
+
+    // Without a client ID in Info.plist, the page falls back to asking for a token
+    var gitHubClientID: String? {
+        (Bundle.main.object(forInfoDictionaryKey: "GitHubClientID") as? String).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    func startGitHubLogin() {
+        guard !gitHubLoginRunning else { return }
+        guard let clientID = gitHubClientID else {
+            sendGitHub(["error": "this copy of Termnotes has no GitHub app set up"])
+            return
+        }
+        gitHubLoginRunning = true
+        Task { @MainActor in
+            defer { gitHubLoginRunning = false }
+            do {
+                let start = try await postForm("https://github.com/login/device/code",
+                                               ["client_id": clientID, "scope": "repo"])
+                guard let deviceCode = start["device_code"] as? String,
+                      let userCode = start["user_code"] as? String,
+                      let verifyURL = (start["verification_uri"] as? String).flatMap(URL.init(string:)) else {
+                    throw GitHubError(message: start["error_description"] as? String ?? "couldn't start sign-in")
+                }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(userCode, forType: .string)
+                sendGitHub(["code": userCode])
+                NSWorkspace.shared.open(verifyURL)
+
+                var interval = start["interval"] as? Int ?? 5
+                let deadline = Date().addingTimeInterval(TimeInterval(start["expires_in"] as? Int ?? 900))
+                while Date() < deadline {
+                    try await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
+                    let poll = try await postForm("https://github.com/login/oauth/access_token", [
+                        "client_id": clientID,
+                        "device_code": deviceCode,
+                        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    ])
+                    if let token = poll["access_token"] as? String {
+                        sendGitHub(["token": token])
+                        NSApp.activate(ignoringOtherApps: true)
+                        return
+                    }
+                    switch poll["error"] as? String {
+                    case "authorization_pending": continue
+                    case "slow_down": interval += 5
+                    default: throw GitHubError(message: poll["error_description"] as? String ?? "sign-in was cancelled")
+                    }
+                }
+                throw GitHubError(message: "the code expired, press ⌘G to try again")
+            } catch {
+                sendGitHub(["error": (error as? GitHubError)?.message ?? error.localizedDescription])
+            }
+        }
+    }
+
+    func postForm(_ url: String, _ fields: [String: String]) async throws -> [String: Any] {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var form = URLComponents()
+        form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = form.percentEncodedQuery?.data(using: .utf8)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+
+    func sendGitHub(_ payload: [String: String]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.githubLogin(\(json))")
     }
 
     // WKWebView needs these for confirm() and alert() to work
@@ -115,6 +230,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         main.addItem(windowItem)
 
         NSApp.mainMenu = main
+    }
+}
+
+final class DragStrip: NSView {
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { window?.zoom(nil) } else { window?.performDrag(with: event) }
     }
 }
 
